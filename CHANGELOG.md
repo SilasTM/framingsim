@@ -1,5 +1,15 @@
 # Changes
 
+## v3
+
+- Use one aiming cursor; the first movement key or building click captures the mouse for continuous turning. Esc releases it and WASD resumes.
+- Drag new material to length with a fixed grip and measured endpoint. End-on views use a bounded screen drag instead of unstable ray projection.
+- Snap to reference ends, midpoints, and custom layout spacing/offsets, with stable capture and release. Magnets use the raw pointer position before grid rounding.
+- Keep precise snap settings behind C. Show only nearby marks and the active target in the scene; Alt temporarily disables both magnets and grid rounding.
+- Select existing loose pieces without opening a panel. Drag a body to move along its grabbed face, or an end handle to resize with the opposite end fixed.
+- Move recipe assemblies together while preserving editable recipe coordinates and existing internal connections.
+- Reject overlapping edits, preserve originals when cancelled, and support undo. Restore the original drawing when menus interrupt a drag.
+
 ## v2
 
 - Mouse look and WASD work immediately; the first click builds. Mouse capture is optional with L.

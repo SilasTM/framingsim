@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>FrameCraft — Precision Freebuild v2</title>
+<title>FrameCraft — Precision Freebuild v3</title>
 <style>
 :root{--bg:#101820;--panel:#15212b;--panel2:#1a2934;--border:#324755;--txt:#eaf2f5;--sub:#91a8b4;--lime:#b7e077;--blue:#79baf0;--orange:#edb771;--red:#fb7974;--top:59px}
 *{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;background:#a0bbc9;color:var(--txt);font:13px/1.4 system-ui,"Segoe UI",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.35;cursor:default}
@@ -99,9 +99,29 @@ body.showInventory #precisionBar,body.showInspector #precisionBar,body.hasModal 
 #resumeHint{top:auto;bottom:166px;left:50%;transform:translateX(-50%);padding:7px 12px;font-size:11px;font-weight:550}
 #toast{top:66px;bottom:auto}
 @media(max-width:620px){#resumeHint{bottom:192px;max-width:90vw;width:max-content}}
+#scene{cursor:none;outline:none}
+body.mouseReleased #scene{cursor:default}
+body.mouseReleased #crosshair,body.dragging #crosshair,body.showInventory #crosshair,body.showInspector #crosshair,body.hasModal #crosshair{visibility:hidden}
+#precisionBar input{pointer-events:auto;background:#233f46;color:#edf7ed;border:1px solid #6e9385;border-radius:6px;padding:5px 7px;font:inherit;width:68px}
+.layoutControls{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;flex-basis:100%;color:#b7cec3;font-weight:450}
+.layoutControls label{display:flex;align-items:center;gap:5px}
+#snapFeedback{color:#f5db9c;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+#placementOverlay{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible}
+#placementOverlay text{font:600 12px system-ui,sans-serif;fill:#f7fff0;paint-order:stroke;stroke:#142b30;stroke-width:4px;stroke-linejoin:round}
+#placementOverlay .snapMark{fill:#112b30;stroke:#a5e4e7;stroke-width:1.5}
+#placementOverlay .activeMark{fill:#f6d489;stroke:#fff2cc;stroke-width:2}
+body.showInventory #placementOverlay,body.showInspector #placementOverlay,body.hasModal #placementOverlay{display:none}
+#resumeHint{bottom:210px} @media(max-width:620px){#resumeHint{bottom:250px}#precisionBar{max-width:96vw}.layoutControls{gap:4px}#precisionBar input{width:60px}}
+/* Keep precision options in the inspector; the scene only shows useful context. */
+.layoutControls,#precisionBar .snapControls label,#precisionBar .snapControls select{display:none}
+#precisionBar{gap:7px 12px;padding:8px 12px}
+#precisionSettings{pointer-events:auto}.precisionKeys{font-size:10px;opacity:.8}
+#resumeHint{bottom:170px}body.dragging #resumeHint{display:none}
+#snapFeedback{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 </style></head>
 <body>
 <canvas id="scene" tabindex="0" aria-label="3D framing workspace"></canvas><div id="crosshair"></div>
+<svg id="placementOverlay" aria-hidden="true"></svg>
 <header id="top">
   <div class="brand"><div class="brandMark">F</div><div><strong>FrameCraft</strong><small>BUILD · EXPLORE · LEARN</small></div></div>
   <div class="mainModes" aria-hidden="true"><span>FREEBUILD</span></div>
@@ -113,7 +133,7 @@ body.showInventory #precisionBar,body.showInspector #precisionBar,body.hasModal 
 <div id="status">Ready to build</div><div id="toast"></div><input type="file" id="fileInput" accept=".json,application/json">
 <div id="quickbar"><div id="quickName">Select a material</div><div id="quickControls"><label id="sizeWrap">Size <select id="quickSize"></select></label><label id="lengthWrap">Length <input id="quickLength" spellcheck="false" value="12′" aria-label="Length in feet or inches"></label><button id="quickAxis" title="Turn board direction (R)">↻ X</button><button id="quickEdit" title="All options">⚙ More</button></div></div>
 <footer id="bottom"><button class="inventorySquare" id="inventoryBottom" title="Inventory (E)">▦</button><div class="hotbar" id="hotbar"></div><button class="inventorySquare" id="inspectorBottom" title="Selected object settings">⚙</button></footer>
-<div id="buildHint">WASD fly · Space ↑ Shift ↓ · Drag length · X grip · B align · T target · Right-click remove · E inventory</div><div id="precisionBar"><span id="placementReadout">Choose a material</span><div class="snapControls"><button id="snapToggle" aria-pressed="true" title="Toggle snapping (N)">Snap on · N</button><label for="snapStep">Step</label><select id="snapStep" aria-label="Snap increment"></select><span id="snapStatus">Alt: freehand</span></div><span class="precisionKeys">X grip · B align · T target · O overlap</span></div><div id="resumeHint">WASD to move · Mouse to look<br><small>L: optional mouse capture · E: inventory</small></div>
+<div id="buildHint">WASD fly · Space ↑ Shift ↓ · Drag length · X grip · B align · T target · Right-click remove · E inventory</div><div id="precisionBar"><span id="placementReadout">Choose a material</span><div class="snapControls"><button id="snapToggle" aria-pressed="true" title="Toggle snapping (N)">Snap on · N</button><label for="snapStep">Grid</label><select id="snapStep" aria-label="Snap increment"></select><span id="snapStatus">Alt: freehand</span></div><button id="precisionSettings">Precision · C</button><div class="layoutControls"><button id="snapEnds" aria-pressed="true">Ends</button><button id="snapMids" aria-pressed="true">Midpoints</button><button id="layoutSnap" aria-pressed="true">Layout</button><label>Every <input id="layoutSpacing" value="16″" aria-label="Layout spacing" spellcheck="false"></label><label>Offset <input id="layoutOffset" value="0″" aria-label="Layout offset" spellcheck="false"></label></div><span id="snapFeedback" role="status"></span><span class="precisionKeys">Hold left mouse & drag to length · R axis · E inventory</span></div><div id="resumeHint">WASD to move · Mouse to look<br><small>Mouse captures when you move · Esc releases it</small></div>
 <div id="modal"><div class="modalbox" id="modalInner"></div></div>
 <script>
 'use strict';
@@ -186,7 +206,7 @@ const MATERIALS=[
  item('Tools','Chalk line','chalk','#69ddf0',{description:'Snap a permanent, non-solid construction reference line to two points. Place boards along either side or at a custom offset.'}),
  item('Tools','Tape measure','measure',C.select,{description:'Click a point to start measuring, then hover or click another point to see the exact 3D distance and offsets.'})
 ];
-const defaults={grip:'Start',alignment:'Center',faceOffset:0,gripOffset:12,allowOverlap:false,snapping:true,snap:1.5,size:'2x6',len:92.625,axis:1,flip:0,repeat:1,oc:16,width:1.5,depth:5.5,fit:0,force:0,
+const defaults={grip:'Start',alignment:'Center',faceOffset:0,gripOffset:12,allowOverlap:false,snapping:true,snap:.0625,snapEnds:true,snapMids:true,layoutSnap:true,layoutSpacing:16,layoutOffset:0,size:'2x6',len:92.625,axis:1,flip:0,repeat:1,oc:16,width:1.5,depth:5.5,fit:0,force:0,
  stud:'2x6',studOC:16,wallHeight:97.125,topPlates:2,header:'2x10',
  joist:'2x10',joistOC:16,sill:'2x6',gasket:1,subfloor:1,blocking:1,
  fThick:8,fDepth:48,fTop:8,fFootW:24,fFootD:10,fSlab:0,
@@ -203,6 +223,20 @@ const snapValue=v=>isSnapping()?round(v,settings.snap):v;
 function snapRadiusAt(p){return clamp(24*Math.max(1,dot(vSub(p,eye),fwd()))*Math.tan(.5)/viewport.h,.125,6)}
 function memberGripOffset(grip,length){return grip==='End'?length:grip==='Center'?length/2:grip==='Offset'?clamp(settings.gripOffset,0,length):0}
 function setSnapping(on){settings.snapping=on;saveLocal();renderInspector();sceneDirty=mouse.dirty=true}
+function layoutMarksNear(distance){
+ const spacing=Number(settings.layoutSpacing),offset=Number(settings.layoutOffset);
+ if(settings.layoutSnap===false||!Number.isFinite(spacing)||spacing<=0||!Number.isFinite(offset))return [];
+ const k=Math.max(0,Math.round((distance-offset)/spacing));
+ return [...new Set([Math.max(0,k-1),k,k+1])].map(i=>({value:offset+i*spacing,kind:'layout',label:fmt(offset+i*spacing)+' from start',key:'layout:'+i}));
+}
+function referenceMarks(lo,hi,near){
+ const marks=[];
+ if(settings.snapEnds!==false)marks.push({value:lo,kind:'end',label:'Start',key:'start'},{value:hi,kind:'end',label:'End',key:'end'});
+ if(settings.snapMids!==false)marks.push({value:(lo+hi)/2,kind:'mid',label:'Midpoint',key:'mid'});
+ for(const m of layoutMarksNear(near-lo))if(m.value>=0&&lo+m.value<=hi+EPS)marks.push({...m,value:lo+m.value});
+ return marks;
+}
+function nearestMark(raw,marks,radius){let chosen=null,best=radius;for(const m of marks){const d=Math.abs(raw-m.value);if(d<best){best=d;chosen=m}}return chosen}
 function toast(s){const e=$('#toast');e.textContent=s;e.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>e.style.display='none',2400)}
 function validWorld(o){return o&&Array.isArray(o.pieces)&&o.pieces.length<50000&&o.pieces.every(b=>Array.isArray(b.c)&&b.c.length===3&&Array.isArray(b.s)&&b.s.every(v=>Number.isFinite(v)&&v>0))}
 function saveLocal(){try{localStorage.setItem(STORE,JSON.stringify({version:2,world,settings}))}catch(e){if(e?.name==='QuotaExceededError')toast('Browser storage is full. Export your project file.')}syncTitle()}
@@ -329,10 +363,9 @@ function referenceSide(h,across){
 }
 function axisAnchor(h,ax){
  const p=h.point[ax],b=h.box;if(!isSnapping())return p;if(!b)return snapValue(p);
- const E=aabb(b),lo=b.c[ax]-E[ax],hi=b.c[ax]+E[ax],targets=[lo,b.c[ax],hi],radius=snapRadiusAt(h.point);
- let snapped=p,best=radius;
- for(const x of targets){if(Math.abs(p-x)<best){best=Math.abs(p-x);snapped=x}}
- return best<radius?snapped:snapValue(p);
+ const E=aabb(b),lo=b.c[ax]-E[ax],hi=b.c[ax]+E[ax],marks=referenceMarks(lo,hi,p),chosen=nearestMark(p,marks,snapRadiusAt(h.point));
+ if(chosen){h.snapHits||={};h.snapHits[ax]={...chosen,axis:ax};return chosen.value}
+ return snapValue(p);
 }
 function alignmentCoord(h,cross,size){
  const b=h.box,side=referenceSide(h,cross),ex=aabb(b)[cross],delta=ex-size/2;
@@ -345,8 +378,8 @@ function alignmentCoord(h,cross,size){
 function guidePlacement(it,h){
  const guide=h.guide,a=guide.a,b=guide.b,d=vSub(b,a),mag=Math.hypot(d[0],d[2]);if(mag<1)return null;
  const T=[d[0]/mag,0,d[2]/mag],N=[-T[2],0,T[0]],rot=-Math.atan2(T[2],T[0]);
- const t=clamp(dot(vSub(h.point,a),T),0,mag),samples=[0,mag/2,mag];let q=clamp(snapValue(t),0,mag),best=snapRadiusAt(h.point);
- if(isSnapping())for(const k of samples){if(Math.abs(k-t)<best){q=k;best=Math.abs(k-t)}}
+ const t=clamp(dot(vSub(h.point,a),T),0,mag),mark=isSnapping()?nearestMark(t,referenceMarks(0,mag,t),snapRadiusAt(h.point)):null;
+ let q=mark?mark.value:clamp(snapValue(t),0,mag);if(mark)h.snapHits={guide:mark};
  const attach=vAdd(a,vMul(T,q));
  const section=it.kind==='lumber'?sizes[settings.size]:it.kind==='panel'?[settings.depth,settings.width]:[settings.width,settings.depth];
  const vertical=settings.axis===1&&it.kind!=='panel',s=it.kind==='panel'?(settings.flip?[settings.width,settings.depth,settings.len]:[settings.len,settings.depth,settings.width]):primitiveDims(it,vertical?1:0);
@@ -375,7 +408,6 @@ function placePrimitive(it,h){
  if(target){
   const E=aabb(target),lo=target.c[ax]-E[ax],hi=target.c[ax]+E[ax];
   if(face===ax){at=n[ax]>0?hi:lo;sign=n[ax]>0?1:-1}
-  else if(isSnapping()&&Math.abs(at-hi)<EPS&&Math.abs(p[ax]-hi)<snapRadiusAt(p))sign=-1;
   if(Math.abs(at-lo)<.1)edgeLabel='start';else if(Math.abs(at-hi)<.1)edgeLabel='end';else if(Math.abs(at-target.c[ax])<.1)edgeLabel='middle';
  }
  const grip=settings.grip||'Start',off=memberGripOffset(grip,s[ax]);
@@ -418,10 +450,10 @@ function placePanel(it,h){
   const anchorCoord=axis=>{
    if(!isSnapping())return p[axis];
    let at=snapValue(p[axis]),best=radius;
-   for(const v of [-E[axis],0,E[axis]])if(Math.abs(p[axis]-v)<best){best=Math.abs(p[axis]-v);at=v}
+   for(const m of referenceMarks(-E[axis],E[axis],p[axis]))if(Math.abs(p[axis]-m.value)<best){best=Math.abs(p[axis]-m.value);at=m.value;h.snapHits||={};h.snapHits[axis]=m}
    return at;
   };
-  const at=anchorCoord(run),sign=isSnapping()&&Math.abs(at-E[run])<EPS&&Math.abs(p[run]-at)<radius?-1:1;
+  const at=anchorCoord(run),sign=1;
   const grip=settings.grip||'Start',off=memberGripOffset(grip,s[run]),c=[...p];
   c[run]=at+sign*(s[run]/2-off);
   if(E[run]>=E[across]*1.5){
@@ -442,7 +474,6 @@ function placePanel(it,h){
  const run=s[other[0]]>=s[other[1]]?other[0]:other[1],across=other.find(i=>i!==run),E=target?aabb(target):null;
  let at=axisAnchor(h,run),sign=1;
  if(target&&face===run){sign=h.normal[run]>0?1:-1;at=target.c[run]+sign*E[run]}
- else if(target&&isSnapping()&&Math.abs(at-(target.c[run]+E[run]))<EPS&&Math.abs(h.point[run]-at)<snapRadiusAt(h.point))sign=-1;
  const grip=settings.grip||'Start',off=memberGripOffset(grip,s[run]);
  c[run]=at+sign*(s[run]/2-off);
  c[across]=target&&(h.guide||E[run]>=E[across]*1.5)?alignmentCoord(h,across,s[across]):axisAnchor(h,across);
@@ -456,9 +487,9 @@ function repeatMembers(b,axis=b.placementAxis??settings.axis){
  for(let i=1;i<count;i++){const next=copy(b);next.c=vAdd(next.c,vMul(direction,i*settings.oc));parts.push(next)}
  return parts;
 }
-function validMembers(parts){
+function validMembers(parts,skipId=null){
  return parts.every((b,i)=>b.c.every(Number.isFinite)&&b.s.every(v=>Number.isFinite(v)&&v>.05)&&
-  (settings.allowOverlap||(!collides(b)&&!parts.slice(0,i).some(p=>obbOverlap(b,p)))));
+  (settings.allowOverlap||(!collides(b,skipId)&&!parts.slice(0,i).some(p=>obbOverlap(b,p)))));
 }
 function placementMarkers(anchor,target){return [anchor,target].map((c,i)=>({c:[...c],s:[2.2,2.2,2.2],n:i?'Board endpoint':'Fixed grip',col:'#56eff6',layer:'Guide'}))}
 function memberPreview(b){
@@ -468,7 +499,12 @@ function memberPreview(b){
  return{boxes,valid,anchorPoint:anchor,targetPoint:target,indicators:placementMarkers(anchor,target),
   text:current().name+'  '+fmt(b.s[ax])+'  · '+settings.grip+' / '+settings.alignment+(b.edgeLabel?'  · '+b.edgeLabel:'')+(!valid?' · blocked':'')};
 }
-function buildGhost(h){if(!h)return null;const b=current().kind==='panel'?placePanel(current(),h):placePrimitive(current(),h);return b?memberPreview(b):null}
+function buildGhost(h){
+ if(!h)return null;const b=current().kind==='panel'?placePanel(current(),h):placePrimitive(current(),h);if(!b)return null;
+ const result=memberPreview(b),snaps=Object.values(h.snapHits||{});
+ result.snapInfo=snaps.find(m=>m.kind==='layout')||snaps.find(m=>m.kind==='mid')||snaps[0]||null;
+ result.referenceHit=h;return result;
+}
 
 function openShape(point,elev=null){if(!point)return null;const y=elev??point[1];return[snapValue(point[0]),y,snapValue(point[2])]}
 function recipePreview(x=mouse.x,y=mouse.y){const it=current(),kind=it.kind;if(kind==='fpoly'){
@@ -498,6 +534,7 @@ function openingPreview(h){const it=current();if(!h?.box?.g||world.groups[h.box.
  return{boxes:[box],valid,op,gid:h.box.g,text:op.type+' opening '+fmt(w)+' × '+fmt(ht)+(valid?'':' · blocked or too close to wall end')}
 }
 function plan(){if(paused)return;hover=cast();preview=null;const it=current();if(!it)return;
+ if(gesture?.editId){preview=gesture.type==='move'?movePreview(gesture):lengthPreview(gesture);return}
  if(it.kind==='measure'){preview=tapePreview(hover);return}
  if(it.kind==='chalk'){preview=chalkPreview();return}
  if(it.kind==='inspect'||it.kind==='remove'){if(hover?.box)preview={boxes:[hover.box],valid:it.kind==='inspect',text:(it.kind==='inspect'?'Inspect ':'Remove ')+hover.box.n};return}
@@ -525,35 +562,42 @@ function lengthPreviewVector(g){return lengthPreview(g)}
 function lengthPreview(g){
  const b=copy(g.base),a=g.axis,min=1.5,grip=g.grip||'Start',T=g.vector||[0,1,2].map(i=>i===a?1:0),ref=[...g.point];
  if(!g.vector)ref[a]=g.anchor;
- const raw=snapValue(clamp(g.amount,-4000,4000)),direction=Math.sign(raw)||(grip==='End'?-(g.startSign||1):(g.startSign||1)),sign=grip==='End'?-direction:direction;
+ const raw=clamp(g.amount,-4000,4000),direction=Math.sign(raw)||(grip==='End'?-(g.startSign||1):(g.startSign||1)),sign=grip==='End'?-direction:direction;
  const offsetGrip=Math.max(0,settings.gripOffset),toLength=dist=>grip==='Center'?Math.max(min,dist*2):grip==='Offset'?Math.max(min+offsetGrip,dist+offsetGrip):Math.max(min,dist);
- let length=toLength(Math.abs(raw)),offset=memberGripOffset(grip,length);
- let far=grip==='End'?-sign*length:sign*(length-offset),snapped='',best=snapRadiusAt(vAdd(ref,vMul(T,far)));
- const desiredFar=far;
- const consider=(scalar,target)=>{
-  if(scalar*direction<=0||Math.abs(scalar)<min||Math.abs(scalar-desiredFar)>=best)return;
+ const desiredFar=raw,radius=snapRadiusAt(vAdd(ref,vMul(T,raw))),candidates=[];
+ const offer=(scalar,info)=>{
+  const distance=Math.abs(scalar-desiredFar),limit=g.snapLock?.key===info.key?radius*1.65:radius;
+  if(scalar*direction<=0||distance>limit)return;
   const candidateLength=toLength(Math.abs(scalar)),candidateOffset=memberGripOffset(grip,candidateLength);
   const candidate={...b,s:[...b.s],c:vAdd(ref,vMul(T,sign*(candidateLength/2-candidateOffset)))};candidate.s[a]=candidateLength;
-  if(!settings.allowOverlap&&obbOverlap(candidate,target))return;
-  best=Math.abs(scalar-desiredFar);far=scalar;snapped=target.n;
+  const actual=grip==='End'?-sign*candidateLength:sign*(candidateLength-candidateOffset);
+  if(Math.abs(actual-scalar)>EPS||!settings.allowOverlap&&(info.target?obbOverlap(candidate,info.target):collides(candidate,g.editId)))return;
+  candidates.push({...info,scalar,distance});
  };
- if(isSnapping())for(const p of world.pieces){if(!isVisible(p))continue;
-  if(g.vector){
+ if(isSnapping()){
+  for(const mark of layoutMarksNear(Math.abs(raw)))offer(direction*mark.value,{...mark,label:mark.label.replace('start','grip'),key:'grip:'+mark.key});
+  for(const p of world.pieces){if(!isVisible(p)||p.id===g.editId)continue;
    const interval=memberFaceInterval(ref,T,b,p,a);
-   if(interval){
-    if(direction>0&&interval[0]>=min)consider(interval[0],p);
-    else if(direction<0&&interval[1]<=-min)consider(interval[1],p);
+   if(!interval&&p!==g.reference)continue;
+   const key='piece:'+p.id+':',R=axesRotation(p),center=dot(vSub(p.c,ref),T);
+   const extent=[0,1,2].reduce((sum,i)=>sum+Math.abs(dot(R.map(row=>row[i]),T))*p.s[i]/2,0);
+   if(interval&&settings.snapEnds!==false){
+    const face=direction>0?interval[0]:interval[1];
+    offer(face,{target:p,kind:'end',label:'End face · '+p.n,key:key+'face:'+direction});
    }
-  }else{
-   const ext=aabb(p),near=[0,1,2].filter(i=>i!==a).every(i=>Math.abs(p.c[i]-b.c[i])<=ext[i]+b.s[i]/2+1);
-   if(near)for(const edge of [p.c[a]-ext[a],p.c[a],p.c[a]+ext[a]])consider(edge-ref[a],p);
+   for(const mark of referenceMarks(center-extent,center+extent,raw)){
+    offer(mark.value,{...mark,target:p,label:mark.label+' · '+p.n,key:key+mark.key});
+   }
   }
  }
- if(snapped){length=toLength(Math.abs(far));offset=memberGripOffset(grip,length)}
+ const locked=candidates.find(c=>c.key===g.snapLock?.key);
+ const chosen=locked||candidates.sort((x,y)=>x.distance-y.distance||({end:0,mid:1,layout:2}[x.kind]-{end:0,mid:1,layout:2}[y.kind]))[0];
+ g.snapLock=chosen?{key:chosen.key,scalar:chosen.scalar}:null;
+ const far=chosen?chosen.scalar:snapValue(raw),length=toLength(Math.abs(far)),offset=memberGripOffset(grip,length),snapped=chosen?.target?.n||chosen?.label||'';
  b.s[a]=length;b.c=vAdd(ref,vMul(T,sign*(length/2-offset)));
- const boxes=repeatMembers(b,a),valid=validMembers(boxes),target=vAdd(ref,vMul(T,grip==='End'?-sign*length:sign*(length-offset)));
- return{boxes,valid,anchorPoint:ref,targetPoint:target,snapTarget:snapped,indicators:placementMarkers(ref,target),
-  text:current().name+'  '+fmt(length)+' · '+grip+' grip locked'+(g.vector?' · chalk line':'')+(snapped?' · snapped to '+snapped:'')+(!valid?' · blocked':'')};
+ const boxes=g.editId?[b]:repeatMembers(b,a),valid=validMembers(boxes,g.editId),target=vAdd(ref,vMul(T,grip==='End'?-sign*length:sign*(length-offset)));
+ return{boxes,valid,anchorPoint:ref,targetPoint:target,snapTarget:snapped,snapInfo:chosen||null,snapCandidates:candidates,indicators:placementMarkers(ref,target),
+  text:(g.editId?b.n:current().name)+'  '+fmt(length)+' · '+grip+' grip locked'+(chosen?' · '+chosen.label:'')+(!valid?' · blocked':'')};
 }
 function finalizePrimitive(){
  const pieces=preview?.boxes;
@@ -572,7 +616,7 @@ function clickBuild(x,y){const it=current(),h=cast(x,y),kind=it.kind;
  if(kind==='chalk'){const h=cast();if(!recipe||recipe.kind!=='chalk'){if(!h)return;recipe={kind:'chalk',start:[...h.point]};toast('Chalk start set. Aim at the other end.');return}
  const P=chalkPreview();if(!P.guideEnd||!P.valid){toast('Extend the chalk line');return}checkpoint();world.guides||=[];world.guides.push({id:uid(),a:recipe.start,b:P.guideEnd});recipe=null;commit();toast('Chalk line set. Aim at it to place material.');return}
  if(kind==='measure'){const p=h&&h.point.map(snapValue);if(!p)return;if(!tapeStart){tapeStart=p;tapeResult=null;toast('Tape start set. Aim or click the end point.')}else{tapeResult={a:tapeStart,b:p};tapeStart=null;toast('Measured '+fmt(Math.hypot(...vSub(p,tapeResult.a))))}sceneDirty=true;return}
- if(kind==='inspect'){selected=h?.box?{g:h.box.g,id:h.box.g?null:h.box.id}:null;renderInspector();if(selected)showInspector(true);sceneDirty=true;return}
+ if(kind==='inspect'){selected=h?.box?{g:h.box.g,id:h.box.g?null:h.box.id}:null;renderInspector();sceneDirty=true;return}
  if(kind==='remove'){eraseTarget();return}
  if(kind==='door'||kind==='window'){const P=openingPreview(h);if(!P.valid){toast(P.text);return}checkpoint();world.groups[P.gid].openings||=[];world.groups[P.gid].openings.push(P.op);rebuild(P.gid);selected={g:P.gid};commit();toast('Opening framed');return}
  if(kind==='fpoly'){const P=aimRecipe(x,y,recipe?.kind==='fpoly'?recipe.y:null);if(!P)return;const p=openShape(P.p);if(!recipe){recipe={kind:'fpoly',pts:[[p[0],p[2]]],y:p[1]}}else{const last=recipe.pts.at(-1);if(Math.hypot(p[0]-last[0],p[2]-last[1])<12){toast('Move farther to set next corner.');return}if(recipe.pts.length>=3&&Math.hypot(p[0]-recipe.pts[0][0],p[2]-recipe.pts[0][1])<12){closePolygon();return}const q=recipe.pts.at(-1);const dx=Math.abs(p[0]-q[0]),dz=Math.abs(p[2]-q[1]);recipe.pts.push(dx>=dz?[p[0],q[1]]:[q[0],p[2]])}renderInspector();sceneDirty=true;return}
@@ -589,15 +633,15 @@ function eraseTarget(){
   toast('Removed '+b.n)}
  selected=null;targetCycle=0;commit();
 }
-function cancelTool(){recipe=null;gesture=null;tapeStart=tapeResult=null;selected=null;
+function cancelTool(){recipe=null;gesture=null;tapeStart=tapeResult=null;selected=null;geometryDirty=true;
  equipped=0;hotbar[activeSlot]=0;renderCatalog();renderInspector();sceneDirty=true;toast('Hand / inspect · item exited');}
 function cycleTarget(){targetCycle++;const h=cast();toast(h?.box?'Target: '+h.box.n+' ('+(targetCycle+1)+')':'Ground');sceneDirty=true;}
-function equip(idx){targetCycle=0;equipped=idx;hotbar[activeSlot]=idx;selected=null;recipe=null;gesture=null;tapeStart=tapeResult=null;const it=current();if(it.kind==='lumber'){settings.size=it.size;settings.len=it.L;settings.axis=it.axis;settings.flip=it.flip||0}else if(it.kind==='primitive'){settings.width=it.w;settings.depth=it.d;settings.len=it.L;settings.axis=it.axis;settings.flip=0}else if(it.kind==='panel'){settings.width=it.w;settings.len=it.L;settings.depth=it.thick;settings.flip=0}settings.repeat=1;renderCatalog();renderInspector();sceneDirty=true}
+function equip(idx){targetCycle=0;equipped=idx;hotbar[activeSlot]=idx;selected=null;recipe=null;gesture=null;geometryDirty=true;tapeStart=tapeResult=null;const it=current();if(it.kind==='lumber'){settings.size=it.size;settings.len=it.L;settings.axis=it.axis;settings.flip=it.flip||0}else if(it.kind==='primitive'){settings.width=it.w;settings.depth=it.d;settings.len=it.L;settings.axis=it.axis;settings.flip=0}else if(it.kind==='panel'){settings.width=it.w;settings.len=it.L;settings.depth=it.thick;settings.flip=0}settings.repeat=1;renderCatalog();renderInspector();sceneDirty=true}
 function renderCatalog(){const cats=['Recipes','All','Foundation','Floor','Walls','Roof','General','Tools'];$('#categories').innerHTML=cats.map(c=>`<button class="chip ${catFilter===c?'active':''}" data-cat="${c}">${c}</button>`).join('');
  const mats=MATERIALS.map((x,i)=>({...x,i})).filter(x=>(catFilter==='All'||(catFilter==='Recipes'?['frect','fpoly','floor','wall','roof','door','window'].includes(x.kind):catFilter===x.cat))&&(!search||(x.name+' '+x.cat).toLowerCase().includes(search.toLowerCase()))).sort((a,b)=>cats.indexOf(a.cat)-cats.indexOf(b.cat));let html='',last='';for(const it of mats){if(catFilter==='All'&&last!==it.cat){html+=`<div class="catLabel">${it.cat}</div>`;last=it.cat}html+=`<button class="material ${equipped===it.i?'active':''}" draggable="true" data-index="${it.i}" title="Select or drag onto scene"><span class="matthumb" style="background:${it.col}">${it.kind==='inspect'?'↖':it.kind==='remove'?'×':it.kind==='roof'?'⌃':it.kind==='wall'?'▥':it.kind==='floor'?'≡':it.kind==='panel'?'▣':'▰'}</span><span><span class="matName">${esc(it.name)}</span><span class="matSub">${it.kind==='primitive'||it.kind==='lumber'?'Drag to stretch':'Click to use'} · ${it.cat}</span></span></button>`}$('#materialList').innerHTML=html||'<p class="muted">No matching materials.</p>';renderHotbar()}
 const hotbar=[0,2,8,15,18,26,33,1];let activeSlot=0;
 function renderHotbar(){$('#hotbar').innerHTML=hotbar.map((idx,i)=>`<button class="slot ${activeSlot===i?'on':''}" data-slot="${i}"><small>${i+1}</small>${esc(MATERIALS[idx].name.replace('Foundation rectangle','Foundation').replace('Framed wall','Wall').replace('Gable roof frame','Roof').replace('Inspect / edit','Inspect').replace('Standard stud','Stud').replace('Floor platform','Floor').replace('Pressure-treated sill','Sill plate').replace('Remove piece','Remove').replace('Rim / band joist','Rim joist'))}</button>`).join('');syncQuick()}
-const fields={grip:['Grab point','choice',['Start','Center','End','Offset']],alignment:['Reference alignment','choice',['Outside','Center','Inside','Custom']],faceOffset:['Custom offset (+ toward outside)','length'],gripOffset:['Offset from start','length'],allowOverlap:['Allow intersections / overlaps','bool'],snapping:['Enable snapping','bool'],snap:['Snap increment','choice',[.0625,.125,.25,.5,.75,1.5,3,6,12,16,24]],len:['Length','length'],axis:['Run direction','choice',[0,1,2],['X – horizontal','Y – vertical','Z – horizontal']],flip:['Rotate cross-section','choice',[0,1],['Flat / default','Turned 90°']],size:['Lumber section','choice',Object.keys(sizes)],width:['Width / face','length'],depth:['Thickness / depth','length'],repeat:['Quantity','choice',[1,2,3,4,5,6,8,10,12,16,20]],oc:['Repeat offset','length'],
+const fields={grip:['Grab point','choice',['Start','Center','End','Offset']],alignment:['Reference alignment','choice',['Outside','Center','Inside','Custom']],faceOffset:['Custom offset (+ toward outside)','length'],gripOffset:['Offset from start','length'],allowOverlap:['Allow intersections / overlaps','bool'],snapping:['Enable snapping','bool'],snapEnds:['Snap to ends','bool'],snapMids:['Snap to midpoints','bool'],layoutSnap:['Snap to layout marks','bool'],layoutSpacing:['Layout spacing from reference start','length'],layoutOffset:['First layout mark offset','length'],snap:['Snap increment','choice',[.0625,.125,.25,.5,.75,1.5,3,6,12,16,24]],len:['Length','length'],axis:['Run direction','choice',[0,1,2],['X – horizontal','Y – vertical','Z – horizontal']],flip:['Rotate cross-section','choice',[0,1],['Flat / default','Turned 90°']],size:['Lumber section','choice',Object.keys(sizes)],width:['Width / face','length'],depth:['Thickness / depth','length'],repeat:['Quantity','choice',[1,2,3,4,5,6,8,10,12,16,20]],oc:['Repeat offset','length'],
  stud:['Stud size','choice',['2x4','2x6','2x8']],studOC:['Studs O.C.','choice',[12,16,19.2,24]],wallHeight:['Wall height','length'],topPlates:['Top plate layers','choice',[1,2,3]],header:['Header section','choice',['2x6','2x8','2x10','2x12']],
  joist:['Joist section','choice',['2x6','2x8','2x10','2x12']],joistOC:['Joists O.C.','choice',[12,16,19.2,24]],sill:['Sill section','choice',['2x4','2x6','2x8']],gasket:['Sill gasket','bool'],subfloor:['¾″ subfloor panels','bool'],blocking:['Midspan blocking','bool'],
  fThick:['Foundation wall width','length'],fDepth:['Wall height / depth','length'],fTop:['Above grade at reference','length'],fFootW:['Footing width (0 = none)','length'],fFootD:['Footing thickness','length'],fSlab:['Interior slab (rectangle)','bool'],
@@ -624,6 +668,11 @@ function renderInspector(){let title,sub,typ,html='',g=selected?.g&&world.groups
  else if(it.kind==='inspect')html+='<p class="muted">Tip: group frames rebuild from their settings. Individual loose pieces have editable X/Y/Z position, dimensions and angles.</p>';
  if(it.kind==='inspect'||it.kind==='remove')html+=`<div class="sectionTitle">World actions</div><div class="inlineButtons"><button class="btn tiny" data-action="takeoff">Material list</button><button class="btn tiny" data-action="clear">New build</button></div>`
  }
+ if(['lumber','primitive','panel','inspect'].includes(it.kind)){
+  html+='<div class="sectionTitle">Snap targets & layout</div>';
+  for(const k of ['snapEnds','snapMids','layoutSnap','layoutSpacing','layoutOffset'])html+=fieldHTML(k,settings[k]);
+  if(g||b||it.kind==='inspect')for(const k of ['snapping','snap'])html+=fieldHTML(k,settings[k]);
+ }
  $('#inspectorMode').textContent=typ;$('#panelTitle').textContent=title;$('#panelSub').textContent=sub;$('#fields').innerHTML=html;renderHotbar()}
 function syncQuick(){const it=current();if(!it)return;$('#quickName').textContent=it.name;
  const isLumber=it.kind==='lumber',isPrimitive=it.kind==='primitive',isPanel=it.kind==='panel',showLength=isLumber||isPrimitive||isPanel;
@@ -632,7 +681,9 @@ function syncQuick(){const it=current();if(!it)return;$('#quickName').textConten
  if(showLength&&document.activeElement!==$('#quickLength'))$('#quickLength').value=fmt(settings.len);
  $('#quickAxis').textContent='↻ '+'XYZ'[settings.axis];
  const steps=$('#snapStep');if(!steps.options.length)steps.innerHTML=fields.snap[2].map(v=>`<option value="${v}">${fmt(v)}</option>`).join('');steps.value=String(settings.snap);
- $('#snapToggle').setAttribute('aria-pressed',String(settings.snapping!==false));$('#snapToggle').textContent=settings.snapping!==false?'Snap on · N':'Snap off · N';}
+ $('#snapToggle').setAttribute('aria-pressed',String(settings.snapping!==false));$('#snapToggle').textContent=settings.snapping!==false?'Snap on · N':'Snap off · N';
+ for(const k of ['snapEnds','snapMids','layoutSnap'])$('#'+k).setAttribute('aria-pressed',String(settings[k]!==false));
+ for(const k of ['layoutSpacing','layoutOffset'])if(document.activeElement!==$('#'+k))$('#'+k).value=fmt(settings[k]);}
 function showInventory(on,resume=true){
  const show=on===undefined?!document.body.classList.contains('showInventory'):on;
  document.body.classList.toggle('showInventory',show);
@@ -640,7 +691,7 @@ function showInventory(on,resume=true){
   document.body.classList.remove('showInspector');
   if(document.pointerLockElement===canvas)document.exitPointerLock();
   unlockForMenus();
-  key={};gesture=null;$('#search').blur();
+  key={};gesture=null;sceneDirty=geometryDirty=true;$('#search').blur();
  }else{
   $('#search').blur();
   mouse.x=viewport.w/2;mouse.y=viewport.h/2;mouse.dirty=true;
@@ -652,7 +703,7 @@ function showInventory(on,resume=true){
 function showInspector(on){
  const show=on===undefined?!document.body.classList.contains('showInspector'):on;
  document.body.classList.toggle('showInspector',show);
- if(show){document.body.classList.remove('showInventory');renderInspector();key={};gesture=null;if(document.pointerLockElement===canvas)document.exitPointerLock()}
+ if(show){document.body.classList.remove('showInventory');renderInspector();key={};gesture=null;sceneDirty=geometryDirty=true;if(document.pointerLockElement===canvas)document.exitPointerLock()}
  else flightLock();
  return show;
 }
@@ -662,11 +713,18 @@ $('#quickEdit').onclick=()=>showInspector();$('#quickAxis').onclick=()=>{setting
 $('#quickSize').onchange=e=>{settings.size=e.target.value;renderInspector();sceneDirty=true};
 $('#quickLength').onchange=e=>{const val=parseInches(e.target.value);if(!Number.isFinite(val)||val<1.5||val>4000){toast('Enter a valid length like 12′ 6″');syncQuick();return}settings.len=val;renderInspector();sceneDirty=true};
 $('#snapToggle').onclick=()=>setSnapping(settings.snapping===false);
+$('#precisionSettings').onclick=()=>showInspector(true);
 $('#snapStep').onchange=e=>{settings.snap=Number(e.target.value);saveLocal();renderInspector();sceneDirty=mouse.dirty=true};
+for(const k of ['snapEnds','snapMids','layoutSnap'])$('#'+k).onclick=()=>{settings[k]=settings[k]===false;saveLocal();renderInspector();sceneDirty=mouse.dirty=true};
+for(const k of ['layoutSpacing','layoutOffset'])$('#'+k).onchange=e=>{
+ const value=parseInches(e.target.value);
+ if(!Number.isFinite(value)||value<0||k==='layoutSpacing'&&value<.0625||value>4000){toast('Enter a valid measurement; spacing must be at least 1/16″.');e.target.value=fmt(settings[k]);return}
+ settings[k]=value;saveLocal();renderInspector();sceneDirty=mouse.dirty=true;
+};
 $('#newBtn').onclick=()=>{document.querySelector('#moreMenu').open=false;confirmNew()};
 function parseField(key,value,scope){const def=fields[key],kind=def?.[1]||'length';if(kind==='choice'){if(typeof def[2][0]==='number')return Number(value);return value}if(kind==='bool')return value==='1';const v=parseInches(value);if(!Number.isFinite(v))return null;return v}
 function changeField(el){const target=el.dataset.target,key=el.dataset.field;if(!target)return;let value=parseField(key,el.value,target);if(value===null){toast('Invalid measurement. Try 96 or 8\' 0\"');renderInspector();return}
- if(target==='settings'){if(['len','width','depth','wallHeight','fDepth','pitch','rafterOC','joistOC','studOC','oc'].includes(key)&&value<=0||key==='gripOffset'&&value<0){toast('Enter a positive measurement (grip offset may be zero).');renderInspector();return}settings[key]=value;saveLocal();renderInspector();sceneDirty=true;return}
+ if(target==='settings'){if(['len','width','depth','wallHeight','fDepth','pitch','rafterOC','joistOC','studOC','oc','layoutSpacing'].includes(key)&&value<=0||['gripOffset','layoutOffset'].includes(key)&&value<0||['layoutSpacing','layoutOffset'].includes(key)&&value>4000){toast('Enter a positive measurement (offset may be zero).');renderInspector();return}settings[key]=value;saveLocal();renderInspector();sceneDirty=true;return}
  if(target==='piece'&&selected?.id){const b=world.pieces.find(b=>b.id===selected.id);if(!b)return;checkpoint();if(key[0]==='c')b.c[Number(key[1])]=clamp(value,-10000,10000);else if(key[0]==='s')b.s[Number(key[1])]=clamp(value,.125,5000);else if(key[0]==='r'){b.r||=[0,0,0];b.r[Number(key[1])]=clamp(value,-360,360)*Math.PI/180}commit();return}
  if(target.startsWith('group')&&selected?.g){const g=world.groups[selected.g];if(!g)return;const originalAxis=g.kind==='wall'&&g.a&&g.b?(Math.abs(g.b[0]-g.a[0])>=Math.abs(g.b[1]-g.a[1])?0:1):-1;
  checkpoint();if(key==='ax'&&g.a)g.a[0]=value;else if(key==='az'&&g.a)g.a[1]=value;else if(key==='bx'&&g.b)g.b[0]=value;else if(key==='bz'&&g.b)g.b[1]=value;else if(key==='y')g.y=value;else {const prop=target.split('.')[1];g[prop]=value}
@@ -742,32 +800,71 @@ function bufferDraw(i,kind){if(!drawCounts[i])return;gl.bindBuffer(gl.ARRAY_BUFF
 // A depth-sorted perspective renderer keeps the sandbox usable if WebGL is disabled.
 function drawSoftware(){const ctx=canvas2D;if(!ctx)return;const W=viewport.w,H=viewport.h;ctx.setTransform(viewport.dpr,0,0,viewport.dpr,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle='#9db9ca';ctx.fillRect(0,0,W,H);
  if(gridVisible){ctx.lineWidth=1;for(let k=-1200;k<=1200;k+=48){ctx.strokeStyle=k%192===0?'#769ba2':'#b0c6c4';for(const [p,q] of [[[k,.15,-1200],[k,.15,1200]],[[-1200,.15,k],[1200,.15,k]]]){const a=project(p),b=project(q);if(!a||!b)continue;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}}}
- const faces=[],visible=visualSolids(world.pieces.filter(isVisible)).concat((world.guides||[]).map(lineGuideBox).filter(Boolean));for(const b of visible.slice(0,3200)){const R=axesRotation(b),half=b.s.map(q=>q/2),base=glColor(b.col);
+ const faces=[],visible=visualSolids(world.pieces.filter(b=>isVisible(b)&&!isEditingPiece(b))).concat((world.guides||[]).map(lineGuideBox).filter(Boolean));for(const b of visible.slice(0,3200)){const R=axesRotation(b),half=b.s.map(q=>q/2),base=glColor(b.col);
  for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const normal=R.map(r=>r[axis]*sign);if(dot(normal,vSub(eye,b.c))<.001)continue;const other=[0,1,2].filter(k=>k!==axis),verts=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([u,v])=>{const pt=[0,0,0];pt[axis]=half[axis]*sign;pt[other[0]]=u*half[other[0]];pt[other[1]]=v*half[other[1]];return transformPoint(b,pt)});
  const xy=verts.map(project);if(xy.some(v=>!v))continue;const shade=.74+.26*Math.max(0,dot(normal,norm([.5,.9,.6])));const col=base.map(v=>Math.round(255*clamp(v*shade,0,1)));faces.push({xy,dist:dot(vSub(b.c,eye),fwd()),col:`rgb(${col.join(',')})`,stroke:['Foundation wall','Strip footing','Concrete wall section'].includes(b.n)?'transparent':'#614d3930'})}}
  faces.sort((a,b)=>b.dist-a.dist);for(const face of faces){ctx.beginPath();ctx.moveTo(...face.xy[0]);for(let i=1;i<4;i++)ctx.lineTo(...face.xy[i]);ctx.closePath();ctx.fillStyle=face.col;ctx.fill();ctx.strokeStyle=face.stroke;ctx.lineWidth=.7;ctx.stroke()}
- const overlays=[{pieces:(selected?.g?world.pieces.filter(b=>b.g===selected.g):selected?.id?world.pieces.filter(b=>b.id===selected.id):[]).concat(preview?.indicators||[]),color:'rgba(54,173,255,.18)',stroke:'#4fbaff'}, {pieces:preview?.boxes||[],color:current().kind==='inspect'?'rgba(54,173,255,.18)':preview?.valid?'rgba(55,220,123,.32)':'rgba(255,85,63,.35)',stroke:current().kind==='inspect'?'#4fbaff':preview?.valid?'#48df83':'#ff644b'}];
+ const overlays=[{pieces:(selected?.g?world.pieces.filter(b=>b.g===selected.g):selected?.id?world.pieces.filter(b=>b.id===selected.id):[]).concat(preview?.indicators||[]),color:'rgba(54,173,255,.18)',stroke:'#4fbaff'}, {pieces:preview?.boxes||[],color:current().kind==='inspect'&&!gesture?.editId?'rgba(54,173,255,.18)':preview?.valid?'rgba(55,220,123,.32)':'rgba(255,85,63,.35)',stroke:current().kind==='inspect'&&!gesture?.editId?'#4fbaff':preview?.valid?'#48df83':'#ff644b'}];
  for(const overlay of overlays){for(const b of overlay.pieces){const h=b.s.map(x=>x/2),corners=Array.from({length:8},(_,i)=>project(transformPoint(b,h.map((v,k)=>i&(1<<k)?v:-v))));if(corners.some(p=>!p))continue;ctx.fillStyle=overlay.color;ctx.strokeStyle=overlay.stroke;ctx.lineWidth=1.65;for(const ids of [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]]){ctx.beginPath();ctx.moveTo(...corners[ids[0]]);for(let i=1;i<4;i++)ctx.lineTo(...corners[ids[i]]);ctx.closePath();ctx.fill();ctx.stroke()}}}
  if(visible.length>3200){ctx.fillStyle='#273744';ctx.fillRect(W/2-120,H-110,240,23);ctx.fillStyle='#fff';ctx.fillText('Enable WebGL to render all pieces',W/2-110,H-93)}
 }
 function resized(){viewport.w=innerWidth;viewport.h=innerHeight;viewport.dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(viewport.w*viewport.dpr);canvas.height=Math.round(viewport.h*viewport.dpr);sceneDirty=true}
 function draw(){if(!gl||!program){if(canvas2D)drawSoftware();sceneDirty=false;return;}
- if(geometryDirty){const [T,L]=frameMesh(visualSolids(world.pieces.filter(isVisible)).concat((world.guides||[]).map(lineGuideBox).filter(Boolean)));bufferPut(0,T);bufferPut(1,L);const [GT,GL]=gridMesh();bufferPut(6,GT);bufferPut(7,GL);geometryDirty=false}
+ if(geometryDirty){const [T,L]=frameMesh(visualSolids(world.pieces.filter(b=>isVisible(b)&&!isEditingPiece(b))).concat((world.guides||[]).map(lineGuideBox).filter(Boolean)));bufferPut(0,T);bufferPut(1,L);const [GT,GL]=gridMesh();bufferPut(6,GT);bufferPut(7,GL);geometryDirty=false}
  const[selectedTris,selectedLines]=frameMesh((selected?.g?world.pieces.filter(b=>b.g===selected.g&&isVisible(b)):selected?.id?world.pieces.filter(b=>b.id===selected.id&&isVisible(b)):[]).concat(preview?.indicators||[]));
  const [pT,pL]=frameMesh(preview?.boxes||[]);bufferPut(2,pT);bufferPut(3,pL);bufferPut(4,selectedTris);bufferPut(5,selectedLines);
  gl.viewport(0,0,canvas.width,canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(program);gl.uniformMatrix4fv(glLoc.vp,false,new Float32Array(viewProjection()));
  gl.enable(gl.DEPTH_TEST);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);gl.uniform4f(glLoc.tint,0,0,0,0);
  bufferDraw(6,gl.TRIANGLES);bufferDraw(7,gl.LINES);bufferDraw(0,gl.TRIANGLES);bufferDraw(1,gl.LINES);
  if(drawCounts[4]){gl.depthMask(false);gl.uniform4f(glLoc.tint,.20,.68,1,.14);bufferDraw(4,gl.TRIANGLES);gl.depthMask(true);gl.uniform4f(glLoc.tint,.25,.75,1,.95);gl.lineWidth(2);bufferDraw(5,gl.LINES)}
- if(drawCounts[2]){let ok=preview.valid,info=current();let co=info.kind==='inspect'?[.3,.75,1]:info.kind==='remove'?[1,.30,.25]:ok?[.28,.87,.47]:[1,.38,.29];gl.depthMask(false);gl.uniform4f(glLoc.tint,...co,.32);bufferDraw(2,gl.TRIANGLES);gl.depthMask(true);gl.uniform4f(glLoc.tint,...co,.88);bufferDraw(3,gl.LINES)}
+ if(drawCounts[2]){let ok=preview.valid,info=current();let co=info.kind==='inspect'&&!gesture?.editId?[.3,.75,1]:info.kind==='remove'?[1,.30,.25]:ok?[.28,.87,.47]:[1,.38,.29];gl.depthMask(false);gl.uniform4f(glLoc.tint,...co,.32);bufferDraw(2,gl.TRIANGLES);gl.depthMask(true);gl.uniform4f(glLoc.tint,...co,.88);bufferDraw(3,gl.LINES)}
  gl.uniform4f(glLoc.tint,0,0,0,0);sceneDirty=false
+}
+function renderPlacementOverlay(){
+ const svg=$('#placementOverlay'),p=preview;
+ const marker=(point,label,active=false)=>{
+  const xy=project(point);if(!xy)return '';
+  const [x,y]=xy;return `<circle cx="${x}" cy="${y}" r="${active?6:4}" class="${active?'activeMark':'snapMark'}"/>`+(label?`<text x="${x+9}" y="${y-9}">${esc(label)}</text>`:'');
+ };
+ if(menusOpen()){svg.innerHTML='';return}
+ const selectedBoard=current().kind==='inspect'&&looseSelection();
+ if(selectedBoard&&!gesture){const end=aimedEnd(selectedBoard);svg.innerHTML=memberEnds(selectedBoard).points.map(p=>marker(p.point,end?.side===p.side?'Drag end to resize':'',end?.side===p.side)).join('');return}
+ if(!p?.anchorPoint||!p.targetPoint){svg.innerHTML='';return}
+ const A=project(p.anchorPoint),B=project(p.targetPoint);if(!A||!B){svg.innerHTML='';return}
+ let html='';
+ if(gesture?.type==='length'){
+  const g=gesture,T=g.vector||[0,1,2].map(i=>i===g.axis?1:0),direction=Math.sign(g.amount)||1;
+  html+=`<line x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="${p.valid?'#d2f2cf':'#ff9c83'}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  if(isSnapping()&&settings.layoutSnap!==false){
+   for(const mark of layoutMarksNear(Math.abs(g.amount)))if(mark.value>.05)html+=marker(vAdd(p.anchorPoint,vMul(T,direction*mark.value)),'');
+  }
+  html+=marker(p.anchorPoint,'Grip locked');
+  html+=marker(p.targetPoint,p.snapInfo?.label||fmt(p.boxes[0].s[g.axis]),!!p.snapInfo);
+ }else if(gesture?.type==='move'){
+  html+=`<line x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="#addde1" stroke-width="1" stroke-dasharray="4 4"/>`;
+  html+=marker(p.targetPoint,p.snapInfo?.label||'Move',!!p.snapInfo);
+ }else{
+  const h=p.referenceHit,b=h?.box;
+  if(isSnapping()&&b&&!h.guide){
+   const axis=[0,1,2].reduce((m,i)=>b.s[i]>b.s[m]?i:m,0),R=axesRotation(b),delta=vSub(h.point,b.c),local=[0,1,2].map(i=>R.reduce((s,row,j)=>s+row[i]*delta[j],0));
+   for(const mark of referenceMarks(-b.s[axis]/2,b.s[axis]/2,local[axis])){const at=[...local];at[axis]=mark.value;html+=marker(transformPoint(b,at),'')}
+  }
+  html+=marker(p.anchorPoint,p.snapInfo?.label||'Click & drag');
+ }
+ svg.innerHTML=html;
 }
 function renderHUD(){const t=preview?.text||(recipe?.kind==='fpoly'?'Add foundation corner':'Aim at a surface to place material'),d=$('#hint'),c=$('#coord');d.textContent=t;c.textContent=(hover?.point?`Aim ${fmt(hover.point[0])} X · ${fmt(hover.point[1])} Y · ${fmt(hover.point[2])} Z`:'Aim at the ground or an existing piece')+(isSnapping()?' · Snap '+fmt(settings.snap):' · Freehand')+(gl?'':' · Software 3D');
  $('#status').textContent='WASD · Space ↑ · Shift ↓ · Ctrl speed · E items · Esc cancel';
  $('#crosshair').style.display='block';
  const buildable=['lumber','primitive','panel'].includes(current().kind);
- $('#placementReadout').textContent=buildable?('GRIP '+settings.grip.toUpperCase()+'   ·   ALIGN '+settings.alignment.toUpperCase()+(settings.alignment==='Custom'?' '+fmt(settings.faceOffset):'')+(settings.allowOverlap?'   ·   OVERLAP ON':'')):(current().kind==='chalk'?'CHALK LINE · click two points':'Use E to choose material · right-click to remove');
- $('#snapStatus').textContent=key.alt?'Freehand (Alt)':isSnapping()?'Alt: freehand':'Free placement';
+ $('#placementReadout').textContent=buildable?(current().name+' · '+'XYZ'[settings.axis]):selected?.g?'Drag assembly · C: dimensions':selected?'Drag body to move · drag end to resize':'E: choose material';
+ const snapKinds=[settings.snapEnds!==false?'Ends':'',settings.snapMids!==false?'Mid':'',settings.layoutSnap!==false?fmt(settings.layoutSpacing):''].filter(Boolean);
+ $('#snapStatus').textContent=key.alt?'Freehand':isSnapping()?(snapKinds.join(' · ')||'Grid '+fmt(settings.snap)):'Free placement';
+ const snapLabel=preview?.snapInfo?.label||'';if($('#snapFeedback').textContent!==snapLabel)$('#snapFeedback').textContent=snapLabel;
+ $('#precisionBar .precisionKeys').textContent=gesture?'Release to finish · Alt: fine adjustment · Esc: cancel':selected?.g?'Drag to move · C: exact dimensions':selected?'Drag body to move · drag end to resize · C: exact dimensions':'Hold left mouse & drag to length · R: axis · E: inventory';
+ document.body.classList.toggle('dragging',!!gesture&&gesture.moved>=5);
+ $('#resumeHint').firstChild.textContent=document.body.classList.contains('mouseReleased')?'WASD resumes movement · E opens inventory':'WASD to move · Mouse to look';
+ renderPlacementOverlay();
 }
 // Flight is the only camera mode. Mouse always looks, WASD flies, Space/Shift rise/fall.
 
@@ -785,7 +882,7 @@ function tick(t){const dt=clamp((t-(tick.prev??t))/1000,0,.05);tick.prev=t;
   if(sceneDirty||mouse.dirty||gesture||recipe){plan();draw();renderHUD();mouse.dirty=false}
  }requestAnimationFrame(tick)
 }
-let pointerPosition=null,captureMouse=false;
+let pointerPosition=null,captureMouse=true,capturePending=false;
 function menusOpen(){return document.body.classList.contains('showInventory')||document.body.classList.contains('showInspector')||document.body.classList.contains('hasModal')}
 function worldInputReady(){return !menusOpen()&&!$('#moreMenu').open}
 function unlockForMenus(){
@@ -795,9 +892,11 @@ function unlockForMenus(){
 }
 function flightLock(){
  canvas.focus({preventScroll:true});pointerPosition=null;
- if(!captureMouse||document.pointerLockElement===canvas)return;
- try{const request=canvas.requestPointerLock?.();if(request?.catch)request.catch(()=>{captureMouse=false;document.body.classList.remove('mouseCaptured')})}
- catch(e){captureMouse=false;console.warn('Pointer lock requires a browser gesture',e)}
+ document.body.classList.remove('mouseReleased');
+ if(!captureMouse||capturePending||document.pointerLockElement===canvas)return;
+ capturePending=true;
+ try{const request=canvas.requestPointerLock?.();if(request?.catch)request.catch(()=>{capturePending=false;captureMouse=false;document.body.classList.remove('mouseCaptured');sceneDirty=true})}
+ catch(e){capturePending=false;captureMouse=false;console.warn('Pointer lock requires a browser gesture',e)}
 }
 function setMode(){mode='fly'}
 function actionDrop(idx,x,y){
@@ -814,43 +913,112 @@ function screenLengthStart(e,h){
  const vector=base.lengthVector||base.guideVector||null;
  const point=base.gripAnchor?[...base.gripAnchor]:base.guideVector?[...base.guideOrigin]:[...base.c];
  if(!vector)point[ax]=anchor;else if(base.guideVector&&!base.gripAnchor)point[1]=base.c[1];
- const g={type:'length',base,axis:ax,anchor,point,grip:settings.grip||'Start',amount:sign*base.s[ax],repeatAxis:ax===0?2:0,moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2,startSign:sign,initial:sign*base.s[ax],vector};
+ const g={type:'length',base,axis:ax,anchor,point,grip:settings.grip||'Start',amount:sign*base.s[ax],repeatAxis:ax===0?2:0,moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2,startSign:sign,initial:sign*base.s[ax],vector,reference:h.box||null};
  g.originMeasure=pointOnAxis(g,g.virtualX,g.virtualY);
  g.amount=sign*1.5;return g;
 }
 function pointOnAxis(g,x,y){
- // Drag plane contains the board's length axis and faces the camera. This maps
- // mouse movement to a real 3D endpoint at any camera distance or zoom.
  const axis=g.vector||[0,1,2].map(i=>i===g.axis?1:0),v=vSub(eye,g.point),side=vSub(v,vMul(axis,dot(v,axis)));
+ const p0=project(g.point),p1=project(vAdd(g.point,vMul(axis,48))),delta=p0&&p1?[p1[0]-p0[0],p1[1]-p0[1]]:null,mag=delta?Math.hypot(...delta):0;
  const D=rayAt(x,y),N=norm(side),den=dot(D,N);
- if(Math.hypot(...side)>1&&Math.abs(den)>1e-5){
+ if(mag>=10&&Math.hypot(...side)>1&&Math.abs(den)>.025){
   const t=dot(vSub(g.point,eye),N)/den;
-  if(t>0&&Number.isFinite(t))return dot(vSub(vAdd(eye,vMul(D,t)),g.point),axis);
+  if(t>0&&t<10000&&Number.isFinite(t))return dot(vSub(vAdd(eye,vMul(D,t)),g.point),axis);
  }
- // Nearly end-on: use the projected board direction instead of jumping.
- const p0=project(g.point),p1=project(vAdd(g.point,vMul(axis,48)));
- if(p0&&p1){const delta=[p1[0]-p0[0],p1[1]-p0[1]],mag=Math.hypot(...delta);
-  if(mag>1)return ((x-viewport.w/2)*delta[0]+(y-viewport.h/2)*delta[1])/(mag*mag)*48;
- }
- return (x-viewport.w/2)*.5;
+ if(mag>=10)return ((x-viewport.w/2)*delta[0]+(y-viewport.h/2)*delta[1])/(mag*mag)*48;
+ const dx=x-viewport.w/2,dy=y-viewport.h/2;
+ if(!g.endOnAxis&&Math.hypot(dx,dy)>3)g.endOnAxis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+ const scale=2*Math.max(10,dot(vSub(g.point,eye),fwd()))*Math.tan(.5)/viewport.h;
+ return (g.endOnAxis==='y'?-dy:dx)*scale;
 }
 function dragMember(g,dx,dy){
- g.virtualX+=dx;g.virtualY+=dy;g.moved+=Math.hypot(dx,dy);
+ g.virtualX+=dx;g.virtualY+=dy;g.moved=Math.max(g.moved,Math.hypot(g.virtualX-viewport.w/2,g.virtualY-viewport.h/2));
  const absolute=pointOnAxis(g,g.virtualX,g.virtualY),diff=absolute-g.originMeasure;
- if(Number.isFinite(diff))g.amount=clamp(diff,-4000,4000);
+ if(Number.isFinite(diff))g.amount=clamp((g.editId?g.initialAmount:0)+diff,-4000,4000);
  sceneDirty=mouse.dirty=true;
+}
+function looseSelection(){return selected?.id&&world.pieces.find(b=>b.id===selected.id&&!b.g)}
+function isEditingPiece(b){return !!gesture&&(b.id===gesture.editId||!!gesture.editGroup&&b.g===gesture.editGroup)}
+function editBoxesValid(boxes,g){return boxes.every(b=>validMembers([b],g.editId))}
+function startGroupMove(id,h){
+ const bases=world.pieces.filter(b=>b.g===id).map(copy),lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+ for(const b of bases){const E=aabb(b);for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],b.c[i]-E[i]);hi[i]=Math.max(hi[i],b.c[i]+E[i])}}
+ const base={c:lo.map((v,i)=>(v+hi[i])/2),s:lo.map((v,i)=>hi[i]-v),n:world.groups[id].kind+' assembly'};
+ return{type:'move',editId:id,editGroup:id,bases,base,point:[...h.point],normal:norm(h.normal),moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2};
+}
+function memberEnds(b){
+ const axis=b.placementAxis??[0,1,2].reduce((m,i)=>b.s[i]>b.s[m]?i:m,0),T=axesRotation(b).map(row=>row[axis]);
+ return{axis,T,points:[-1,1].map(side=>({side,point:vAdd(b.c,vMul(T,side*b.s[axis]/2))}))};
+}
+function aimedEnd(b){
+ const ends=memberEnds(b);let nearest=null,best=16;
+ for(const end of ends.points){const p=project(end.point);if(!p)continue;const dist=Math.hypot(p[0]-viewport.w/2,p[1]-viewport.h/2);if(dist<best){best=dist;nearest={...end,...ends}}}
+ return nearest;
+}
+function startResize(b,end){
+ const point=vAdd(b.c,vMul(end.T,-end.side*b.s[end.axis]/2));
+ const g={type:'length',editId:b.id,base:copy(b),axis:end.axis,vector:end.T,point,anchor:point[end.axis],grip:'Start',startSign:end.side,initialAmount:end.side*b.s[end.axis],amount:end.side*b.s[end.axis],moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2};
+ g.originMeasure=pointOnAxis(g,g.virtualX,g.virtualY);return g;
+}
+function movePreview(g){
+ const D=rayAt(g.virtualX,g.virtualY),den=dot(D,g.normal);let delta=[0,0,0];
+ if(Math.abs(den)>.025){const t=dot(vSub(g.point,eye),g.normal)/den;if(t>0&&t<10000)delta=vSub(vAdd(eye,vMul(D,t)),g.point)}
+ delta=delta.map(v=>snapValue(clamp(v,-4000,4000)));delta=vSub(delta,vMul(g.normal,dot(delta,g.normal)));
+ const b=copy(g.base);b.c=vAdd(b.c,delta);let snapInfo=null;
+ if(isSnapping())for(let axis=0;axis<3;axis++){
+  if(Math.abs(g.normal[axis])>.1)continue;
+  let best=snapRadiusAt(b.c),chosen=null;
+  for(const target of world.pieces){if(target.id===b.id||g.editGroup&&target.g===g.editGroup||!isVisible(target))continue;
+   const E=aabb(target),e=aabb(b),near=[0,1,2].filter(i=>i!==axis).every(i=>Math.abs(target.c[i]-b.c[i])<=E[i]+e[i]+best);
+   if(!near)continue;
+   const marks=referenceMarks(target.c[axis]-E[axis],target.c[axis]+E[axis],b.c[axis]);
+   if(settings.snapEnds!==false)marks.push({value:target.c[axis]-E[axis]-e[axis],kind:'end',label:'Face'},{value:target.c[axis]+E[axis]+e[axis],kind:'end',label:'Face'});
+   for(const mark of marks){const distance=Math.abs(b.c[axis]-mark.value);if(distance>=best)continue;
+    const probe={...b,c:[...b.c]};probe.c[axis]=mark.value;
+    if(!settings.allowOverlap&&collides(probe,g.editId))continue;
+    best=distance;chosen=mark;snapInfo={...mark,label:mark.label+' · '+target.n};
+   }
+  }
+  if(chosen)b.c[axis]=chosen.value;
+ }
+ const translation=vSub(b.c,g.base.c),boxes=g.editGroup?g.bases.map(p=>({...p,c:vAdd(p.c,translation)})):[b],valid=editBoxesValid(boxes,g);
+ return{boxes,valid,translation,anchorPoint:g.base.c,targetPoint:b.c,snapInfo,indicators:[],text:'Move '+b.n+(snapInfo?' · '+snapInfo.label:'')+(!valid?' · blocked':'')};
+}
+function finishEdit(g){
+ if(g.moved<5){gesture=null;sceneDirty=geometryDirty=true;return}
+ const result=preview;
+ if(!result?.valid||!editBoxesValid(result.boxes,g)){gesture=null;sceneDirty=geometryDirty=true;toast('That position intersects another piece.');return}
+ if(g.editGroup){
+  const group=world.groups[g.editGroup];if(!group){gesture=null;sceneDirty=geometryDirty=true;return}
+  checkpoint();const delta=result.translation;
+  for(const key of ['a','b'])if(group[key])group[key]=[group[key][0]+delta[0],group[key][1]+delta[2]];
+  if(group.points)group.points=group.points.map(p=>[p[0]+delta[0],p[1]+delta[2]]);group.y+=delta[1];
+  const positions=new Map(result.boxes.map(p=>[p.id,p.c]));for(const p of world.pieces)if(positions.has(p.id))p.c=[...positions.get(p.id)];
+  gesture=null;commit();toast('Assembly moved');return;
+ }
+ const b=world.pieces.find(p=>p.id===g.editId);if(!b){gesture=null;sceneDirty=geometryDirty=true;return}
+ checkpoint();const next=result.boxes[0];b.c=[...next.c];b.s=[...next.s];if(next.r)b.r=[...next.r];gesture=null;commit();toast(g.type==='move'?'Piece moved':'Length updated');
 }
 let orbitStart=null; // kept only for compatibility with project scripts
 canvas.addEventListener('pointerenter',e=>{pointerPosition=[e.clientX,e.clientY]});
 canvas.addEventListener('pointerleave',()=>{if(!gesture)pointerPosition=null});
 canvas.addEventListener('pointerdown',e=>{
  if(!worldInputReady())return;
+ if(e.pointerType==='mouse'&&document.pointerLockElement!==canvas){captureMouse=true;flightLock()}
  if(e.pointerType==='mouse'&&e.button===2){canvas.focus({preventScroll:true});eraseTarget();return}
  if(e.pointerType==='mouse'&&e.button!==0)return;
  canvas.focus({preventScroll:true});pointerPosition=[e.clientX,e.clientY];
  if(document.pointerLockElement!==canvas){try{canvas.setPointerCapture(e.pointerId)}catch{}}
  setCursor(e);
  const kind=current().kind,h=cast();
+ if(kind==='inspect'){
+  const selectedBoard=looseSelection(),end=selectedBoard&&aimedEnd(selectedBoard);
+  if(end){gesture=startResize(selectedBoard,end);sceneDirty=geometryDirty=true;return}
+  if(h?.box&&!h.guide){
+   selected=h.box.g?{g:h.box.g,id:null}:{id:h.box.id};renderInspector();
+   gesture=h.box.g?startGroupMove(h.box.g,h):{type:'move',editId:h.box.id,base:copy(h.box),point:[...h.point],normal:norm(h.normal),moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2};sceneDirty=geometryDirty=true;return;
+  }
+ }
  if(kind==='lumber'||kind==='primitive'||kind==='panel'){
   gesture=screenLengthStart(e,h);if(!gesture)toast('Aim at the top or end of a surface');
   return;
@@ -865,10 +1033,14 @@ canvas.addEventListener('pointerdown',e=>{
 });
 canvas.addEventListener('pointermove',e=>{
  if(!worldInputReady()){pointerPosition=null;return}
+ if(document.body.classList.contains('mouseReleased')&&!gesture)return;
  const locked=document.pointerLockElement===canvas,last=pointerPosition;
  pointerPosition=[e.clientX,e.clientY];
  const dx=locked?e.movementX:last?e.clientX-last[0]:0,dy=locked?e.movementY:last?e.clientY-last[1]:0;
  if(gesture?.type==='length')dragMember(gesture,dx,dy);
+ else if(gesture?.type==='move'){
+  gesture.virtualX+=dx;gesture.virtualY+=dy;gesture.moved=Math.max(gesture.moved,Math.hypot(gesture.virtualX-viewport.w/2,gesture.virtualY-viewport.h/2));sceneDirty=mouse.dirty=true;
+ }
  else if(gesture?.type==='shape'){
   gesture.virtualX+=dx;gesture.virtualY+=dy;
   gesture.moved+=Math.hypot(dx,dy);
@@ -884,6 +1056,7 @@ canvas.addEventListener('pointermove',e=>{
 function endCanvas(e){
  if(!gesture)return;
  const g=gesture;
+ if(g.editId){plan();finishEdit(g);return}
  if(g.type==='length'){
   if(g.moved<5){preview=memberPreview(g.base);gesture=null;finalizePrimitive()}
   else{plan();gesture=null;finalizePrimitive()}
@@ -900,7 +1073,7 @@ function endCanvas(e){
  gesture=null;clickBuild(viewport.w/2,viewport.h/2);
 }
 canvas.addEventListener('pointerup',endCanvas);
-canvas.addEventListener('pointercancel',()=>{gesture=null;pointerPosition=null});
+canvas.addEventListener('pointercancel',()=>{gesture=null;pointerPosition=null;sceneDirty=geometryDirty=true});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{e.preventDefault();activeSlot=(activeSlot+(e.deltaY>0?1:7))%8;equip(hotbar[activeSlot]);mouse.dirty=true},{passive:false});
 
@@ -915,20 +1088,26 @@ $('#layerBtn').onclick=()=>{const ls=['All','Foundation','Floor','Walls','Roof',
 $('#gridBtn').onclick=()=>{gridVisible=!gridVisible;$('#gridBtn').textContent=gridVisible?'Grid ✓':'Grid ✕';sceneDirty=geometryDirty=true};
 
 document.addEventListener('pointerlockchange',()=>{
+ capturePending=false;
  if(document.pointerLockElement===canvas&&(document.body.classList.contains('showInventory')||document.body.classList.contains('showInspector')||document.body.classList.contains('hasModal'))){unlockForMenus();return}
  document.body.classList.toggle('mouseCaptured',document.pointerLockElement===canvas);
- if(document.pointerLockElement!==canvas){gesture=null;if(!menusOpen())captureMouse=false}
+ if(document.pointerLockElement!==canvas){gesture=null;geometryDirty=true;if(!menusOpen()){captureMouse=false;document.body.classList.add('mouseReleased')}}
+ else document.body.classList.remove('mouseReleased');
  pointerPosition=null;
  mouse.x=viewport.w/2;mouse.y=viewport.h/2;mouse.dirty=true;sceneDirty=true;
 });
+document.addEventListener('pointerlockerror',()=>{capturePending=false;captureMouse=false;sceneDirty=true});
 addEventListener('keydown',e=>{
  let k=e.key.toLowerCase(),tag=document.activeElement?.tagName;
  if(k==='e'&&!$('#modal').classList.contains('show')&&!e.ctrlKey&&!e.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes(tag)){e.preventDefault();showInventory();return}
  if(k==='escape'){
+  captureMouse=false;capturePending=false;
+  if(document.pointerLockElement===canvas)document.exitPointerLock();
+  document.body.classList.add('mouseReleased');key={};
   if(document.body.classList.contains('showInventory')){e.preventDefault();showInventory(false);return}
   if(document.body.classList.contains('showInspector')){e.preventDefault();showInspector(false);return}
   if($('#modal').classList.contains('show')){closeModal();return}
-  if(recipe||gesture||tapeStart){recipe=null;gesture=null;tapeStart=tapeResult=null;renderInspector();toast('Cancelled command');return}
+  if(recipe||gesture||tapeStart){recipe=null;gesture=null;tapeStart=tapeResult=null;sceneDirty=geometryDirty=true;renderInspector();toast('Cancelled command');return}
   cancelTool();
   // Escape releases optional mouse capture; ordinary mouse look remains available.
   return;
@@ -944,7 +1123,7 @@ addEventListener('keydown',e=>{
  }
  if(document.body.classList.contains('showInspector')){if(k==='c')showInspector(false);return}
  if($('#modal').classList.contains('show'))return;
- if(k==='l'){e.preventDefault();if(!e.repeat){captureMouse=document.pointerLockElement!==canvas;if(captureMouse)flightLock();else document.exitPointerLock()}return}
+ if(k==='l'){e.preventDefault();if(!e.repeat){captureMouse=document.pointerLockElement!==canvas;if(captureMouse)flightLock();else{document.body.classList.add('mouseReleased');document.exitPointerLock()}}return}
  if(k==='c'){e.preventDefault();showInspector(true);return}
  if(k==='v'||k==='0'){e.preventDefault();cancelTool();return}
  if(k==='x'){const a=['Start','Center','End','Offset'];settings.grip=a[(a.indexOf(settings.grip)+1)%a.length];toast('Grab: '+settings.grip);renderInspector();sceneDirty=true;return}
@@ -958,10 +1137,11 @@ addEventListener('keydown',e=>{
  if(k==='f'){settings.flip=settings.flip?0:1;renderInspector();sceneDirty=true;return}
  if(k==='g'){gridVisible=!gridVisible;sceneDirty=geometryDirty=true;return}
  if(k==='tab'){toast('Free flight is always on. WASD + mouse to move.');return}
+ if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','shift'].includes(k)&&worldInputReady()&&document.pointerLockElement!==canvas){captureMouse=true;flightLock()}
  key[k]=true;if(k==='alt'){e.preventDefault();sceneDirty=mouse.dirty=true}
 });
 addEventListener('keyup',e=>{key[e.key.toLowerCase()]=false;if(e.key==='Alt')sceneDirty=mouse.dirty=true});
-addEventListener('blur',()=>{key={};gesture=null;pointerPosition=null});
+addEventListener('blur',()=>{key={};gesture=null;pointerPosition=null;sceneDirty=geometryDirty=true});
 document.addEventListener('focusin',e=>{if(e.target.matches('input,select,textarea,button'))key={}});
 $('#inventoryOptions').onclick=()=>showInspector(true);
 $('#inventoryProjects').onclick=()=>{showInventory(false,false);projectMenu()};
@@ -979,9 +1159,9 @@ function projectMenu(){modal(`<div class="eyebrow">FREEBUILD</div><h1>Project & 
 
 function modal(html){$('#modalInner').innerHTML=html;$('#modal').classList.add('show');document.body.classList.add('hasModal');unlockForMenus();key={}}function closeModal(){$('#modal').classList.remove('show');document.body.classList.remove('hasModal');flightLock()}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal'||e.target.closest('[data-close-modal]'))closeModal()});
-function help(){modal(`<div class="eyebrow">FRAMECRAFT · FREEBUILD</div><h1>Frame anything, one board at a time.</h1><p>Movement works immediately: use <b>WASD</b> to fly and move the mouse to look. Press <b>L</b> only if you want optional mouse capture for unlimited turning. Aim at the <b>edge or end</b> of a foundation, plate, joist or stud. <b>Hold left mouse and drag</b>: the start stays locked, the end follows your mouse in 3D and snaps to nearby ends. Drag past the end to extend. Release to place.</p>
-<div class="helpGrid"><div><h2>Fly</h2><p><kbd>Mouse</kbd> look immediately<br><kbd>L</kbd> optional mouse capture<br><kbd>W A S D</kbd> fly<br><kbd>Space</kbd> up · <kbd>Shift</kbd> down<br><kbd>Ctrl</kbd> fast</p><h2>Build</h2><p><kbd>Hold LMB + move</kbd> stretch a board; cyan markers show the fixed grip and moving end<br><kbd>Click LMB</kbd> place the exact preview length<br><kbd>R</kbd> rotate run X/Y/Z<br><kbd>X</kbd> Start / middle / end grip<br><kbd>B</kbd> Outside / center / inside / custom<br><kbd>N</kbd> toggle snapping · <kbd>Alt</kbd> hold for freehand<br>Choose a snap step down to 1/16″ in the bottom controls<br><kbd>T</kbd> cycle stacked targets<br><kbd>O</kbd> allow overlap<br><kbd>F</kbd> flip cross-section</p></div><div><h2>Tools</h2><p><kbd>E</kbd> recipes/inventory · returns directly to mouse look<br><kbd>C</kbd> dimensions/assembly editing<br><kbd>1–8</kbd> select material<br><kbd>Ctrl Z / Ctrl Y</kbd> undo/redo<br><kbd>Right-click</kbd> remove target<br><kbd>0 / V</kbd> exit held item<br><kbd>Esc</kbd> cancel command</p><p>To make a framed wall, floor, foundation or roof choose its recipe in E, aim at the first corner and click, then aim and click the opposite corner.</p></div></div>
-<p>Choose <b>Chalk line</b> in inventory, click two points, then aim at the line. It becomes a non-solid alignment reference. Outside/inside means left/right of the line as drawn.</p><p style="font-size:12px">Creative sandbox only: connections, header spans, footing design and structural loading require separate verification.</p><div class="row"><button class="btn primary" data-close-modal>Start building</button><button class="btn" id="modalDemo">Sample house</button></div>`);$('#modalDemo').onclick=()=>{closeModal();demoHouse()}}
+function help(){modal(`<div class="eyebrow">FRAMECRAFT · V3</div><h1>Build, then adjust.</h1><p>Use <b>WASD</b> to move. Your first movement key or building click captures the mouse for continuous turning. <b>Esc</b> releases it for menus; WASD resumes. The scene uses one aiming cursor.</p>
+<div class="helpGrid"><div><h2>Place</h2><p><kbd>E</kbd> choose a material<br><kbd>Hold LMB + drag</kbd> draw its length<br><kbd>Release</kbd> place<br><kbd>R</kbd> choose X/Y/Z run<br><kbd>F</kbd> rotate the cross-section<br><kbd>X</kbd> change the fixed grip<br><kbd>B</kbd> change face alignment</p><h2>Edit</h2><p><kbd>0 / V</kbd> select mode<br>Click a piece to select it.<br>Drag its body to move along the grabbed face.<br>Drag an end handle to resize; the opposite end stays fixed.<br>Drag a wall, floor, roof, or foundation assembly to move it together.<br><kbd>C</kbd> exact position, dimensions, and angles</p></div><div><h2>Snap</h2><p>Ends and midpoints appear automatically near the piece you aim at. Layout marks default to <b>16″</b>. A gold marker names the active snap, which stays steady until you drag away.</p><p><kbd>C</kbd> change layout spacing, first-mark offset, and grid precision; enable or disable target types<br><kbd>Alt</kbd> hold for freehand fine adjustment<br><kbd>N</kbd> toggle all snapping<br><kbd>T</kbd> cycle stacked targets</p><h2>Move & undo</h2><p><kbd>Space / Shift</kbd> up / down<br><kbd>Ctrl</kbd> move faster<br><kbd>E</kbd> inventory and project tools<br><kbd>Ctrl Z / Ctrl Y</kbd> undo / redo<br><kbd>Esc</kbd> cancel an active drag<br><kbd>Right-click</kbd> remove target</p></div></div>
+<p>Recipe assemblies retain their settings when moved. Use C to change a wall, floor, roof, or foundation recipe.</p><p style="font-size:12px">Creative sandbox only: connections, header spans, footing design and structural loading require separate verification.</p><div class="row"><button class="btn primary" data-close-modal>Back to building</button><button class="btn" id="modalDemo">Sample house</button></div>`);$('#modalDemo').onclick=()=>{closeModal();demoHouse()}}
 
 $('#helpBtn').onclick=help;
 function downloadText(name,data,type){const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000)}

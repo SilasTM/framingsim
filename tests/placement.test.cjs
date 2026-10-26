@@ -405,7 +405,9 @@ test('repeating angled boards uses exact on-center spacing perpendicular to thei
 });
 
 test('snap controls and the N shortcut persist their state after reload', async () => {
-  await page.locator('#snapStep').selectOption('0.25');
+  await page.keyboard.press('c');
+  await page.locator('#fields [data-field="snap"]').selectOption('0.25');
+  await page.keyboard.press('Escape');
   await page.locator('#snapToggle').click();
   assert.equal(await page.locator('#snapToggle').getAttribute('aria-pressed'), 'false');
   await page.reload();
@@ -421,7 +423,7 @@ test('snap controls and the N shortcut persist their state after reload', async 
 test('focusing a settings control stops held flight movement', async () => {
   await page.keyboard.down('w');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await page.locator('#snapStep').focus();
+  await page.locator('#precisionSettings').focus();
   const beforeFocusTicks = await page.evaluate(() => [...eye]);
   const afterFocusTicks = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve([...eye])))));
   await page.keyboard.up('w');
@@ -669,7 +671,7 @@ test('dragging a sloped roof panel preserves its support plane and fixed grip', 
   assert.deepEqual(failures, []);
 });
 
-test('mouse look and WASD work immediately without capturing the pointer', async () => {
+test('mouse look works immediately and WASD captures the pointer without an initial click', async () => {
   await page.mouse.move(640, 400);
   const initial = await page.evaluate(() => ({ yaw, pitch, eye: [...eye], locked: !!document.pointerLockElement }));
   await page.mouse.move(700, 430);
@@ -679,12 +681,13 @@ test('mouse look and WASD work immediately without capturing the pointer', async
   assert.notEqual(looked.yaw, initial.yaw, 'Moving the free pointer changes camera yaw');
   assert.notEqual(looked.pitch, initial.pitch, 'Moving the free pointer changes camera pitch');
   await page.keyboard.down('w');
+  await page.waitForFunction(() => document.pointerLockElement === canvas);
   const moved = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve([...eye])))));
   await page.keyboard.up('w');
   assert.ok(moved.some((value, i) => Math.abs(value - initial.eye[i]) > 1e-7), 'W flies without a prior canvas click');
 });
 
-test('the first unlocked click places the selected board', async () => {
+test('the first click captures the pointer and places the selected board', async () => {
   await page.mouse.move(640, 400);
   await page.keyboard.press('5');
   const selectedLength = await page.evaluate(() => {
@@ -694,12 +697,12 @@ test('the first unlocked click places the selected board', async () => {
   });
   await page.mouse.click(640, 400);
   const result = await page.evaluate(() => ({ pieces: world.pieces, locked: !!document.pointerLockElement }));
-  assert.equal(result.locked, false, 'Placing a board does not require capturing the mouse');
+  assert.equal(result.locked, true, 'The first build gesture also enables continuous mouse look');
   assert.equal(result.pieces.length, 1, 'The first click builds instead of being consumed by pointer capture');
   closeTo(result.pieces[0].s[1], selectedLength, 'A click keeps the selected stud length');
 });
 
-test('an unlocked board drag changes length while the camera remains fixed', async () => {
+test('a board drag captures the pointer and changes length while the camera remains fixed', async () => {
   await page.mouse.move(640, 400);
   await page.keyboard.press('5');
   await page.keyboard.press('r');
@@ -713,7 +716,7 @@ test('an unlocked board drag changes length while the camera remains fixed', asy
   await page.mouse.move(760, 400, { steps: 5 });
   await page.mouse.up();
   const result = await page.evaluate(() => ({ pieces: world.pieces, yaw, pitch, eye, locked: !!document.pointerLockElement }));
-  assert.equal(result.locked, false);
+  assert.equal(result.locked, true);
   assert.equal(result.pieces.length, 1, 'Releasing the drag places a board');
   assert.notEqual(result.pieces[0].s[0], initial.length, 'Dragging stretches the board');
   closeTo(result.yaw, initial.yaw, 'Camera yaw is fixed while dragging');
@@ -729,4 +732,304 @@ test('moving over the inventory does not turn the camera', async () => {
   await page.mouse.move(750, 500, { steps: 3 });
   const after = await page.evaluate(() => ({ yaw, pitch }));
   assert.deepEqual(after, before);
+});
+
+async function frame() {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function plateScene(overrides = {}) {
+  await page.mouse.move(640, 400);
+  await page.evaluate(overrides => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, overrides, { axis: 0, grip: 'Start', len: 96, repeat: 1, size: '2x6', flip: 0 });
+    world = { name: 'Drag interaction', pieces: [{ id: 1, g: null, c: [96, .75, 0], s: [192, 1.5, 5.5], n: 'Reference plate', layer: 'Floor' }], groups: {}, guides: [], next: 2 };
+    history = []; future = []; selected = null;
+    eye = [0, 100, 300]; yaw = 0; pitch = -Math.atan((100 - 1.5) / 300);
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  }, overrides);
+  await frame();
+}
+
+async function beginPlateDrag(overrides) {
+  await plateScene(overrides);
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'length' && document.pointerLockElement === canvas);
+  await frame();
+}
+
+async function dragEndpoint(distance) {
+  const pixel = await page.evaluate(distance => {
+    const g = gesture;
+    const T = g.vector || [0, 1, 2].map(i => i === g.axis ? 1 : 0);
+    return project(vAdd(g.point, vMul(T, distance + g.originMeasure - (g.editId ? g.initialAmount : 0))));
+  }, distance);
+  assert.ok(pixel, 'The fixture endpoint is in front of the camera');
+  await page.mouse.move(pixel[0], pixel[1], { steps: 5 });
+  await frame();
+}
+
+test('the scene has one aim cursor and inventory restores the normal pointer', async () => {
+  assert.equal(await page.locator('#scene').evaluate(el => getComputedStyle(el).cursor), 'none');
+  await page.keyboard.down('w');
+  await page.waitForFunction(() => document.pointerLockElement === canvas);
+  await page.keyboard.up('w');
+  assert.equal(await page.locator('#crosshair').evaluate(el => getComputedStyle(el).visibility), 'visible');
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => !document.pointerLockElement);
+  assert.equal(await page.locator('#crosshair').evaluate(el => getComputedStyle(el).visibility), 'hidden');
+  assert.notEqual(await page.locator('#search').evaluate(el => getComputedStyle(el).cursor), 'none');
+});
+
+test('a real click and drag snaps to a reference midpoint and places the measured length', async () => {
+  await beginPlateDrag();
+  const anchor = await page.evaluate(() => [...gesture.point]);
+  await dragEndpoint(95.3);
+  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[0], snap: preview.snapInfo, anchor: preview.anchorPoint, camera: [yaw, pitch] }));
+  closeTo(result.length, 96, 'The endpoint lands exactly at the reference midpoint');
+  assert.equal(result.snap.kind, 'mid');
+  assert.deepEqual(result.anchor, anchor, 'The start stays fixed during the entire drag');
+  assert.match(await page.locator('#placementOverlay').textContent(), /Midpoint/);
+  await page.mouse.up();
+  const board = await page.evaluate(() => world.pieces.find(b => b.id === 2));
+  closeTo(board.s[0], 96, 'Release preserves the snapped length');
+  closeTo(board.c[0] - board.s[0] / 2, 0, 'Release preserves the start');
+});
+
+test('a real drag snaps flush to the end of the reference', async () => {
+  await beginPlateDrag();
+  await dragEndpoint(191.3);
+  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[0], snap: preview.snapInfo, valid: preview.valid }));
+  closeTo(result.length, 192, 'The board reaches the reference end exactly');
+  assert.equal(result.snap.kind, 'end');
+  assert.equal(result.valid, true);
+  await page.mouse.up();
+});
+
+test('midpoint snapping stays steady under hand jitter and releases when dragged away', async () => {
+  await beginPlateDrag();
+  await dragEndpoint(95.5);
+  await dragEndpoint(102);
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 96, 'A small movement retains the active midpoint');
+  await dragEndpoint(112);
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 112, 'Moving away selects the next layout mark');
+  await page.mouse.up();
+});
+
+test('custom spacing and offset accept fractions and control real drag snapping', async () => {
+  await page.keyboard.press('c');
+  await page.locator('#fields [data-field="layoutSpacing"]').fill('1\' 11 7/8"');
+  await page.locator('#fields [data-field="layoutSpacing"]').press('Tab');
+  await page.locator('#fields [data-field="layoutOffset"]').fill('3 1/4"');
+  await page.locator('#fields [data-field="layoutOffset"]').press('Tab');
+  const custom = await page.evaluate(() => ({ layoutSpacing: settings.layoutSpacing, layoutOffset: settings.layoutOffset }));
+  assert.deepEqual(custom, { layoutSpacing: 23.875, layoutOffset: 3.25 });
+  await page.keyboard.press('Escape');
+  await beginPlateDrag(custom);
+  await dragEndpoint(26.8);
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 27.125, 'The endpoint uses custom spacing plus offset');
+  assert.equal(await page.evaluate(() => preview.snapInfo.kind), 'layout');
+  await page.mouse.up();
+});
+
+test('Alt temporarily frees an active drag from both magnets and the grid', async () => {
+  await beginPlateDrag();
+  await dragEndpoint(95.3);
+  await page.keyboard.down('Alt');
+  await frame();
+  const free = await page.evaluate(() => ({ length: preview.boxes[0].s[0], raw: gesture.amount }));
+  assert.ok(Math.abs(free.length - 95.3) < .25, 'Freehand follows the actual pointer within one screen pixel');
+  closeTo(free.length, free.raw, 'Freehand applies neither grid rounding nor a magnetic snap');
+  assert.equal(await page.evaluate(() => preview.snapInfo), null);
+  await page.keyboard.up('Alt');
+  await frame();
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 96, 'Releasing Alt restores the midpoint');
+  await page.mouse.up();
+});
+
+test('an almost end-on drag has a controlled length instead of a projection jump', async () => {
+  await page.mouse.move(640, 400);
+  await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Floor joist'));
+    Object.assign(settings, defaults, { axis: 2, grip: 'Start' });
+    world = { name: 'End-on', pieces: [{ id: 1, g: null, c: [0, 10, -.75], s: [5.5, 10, 1.5], n: 'Support', layer: 'Floor' }], groups: {}, guides: [], next: 2 };
+    eye = [0, 10, 200]; yaw = 0; pitch = 0; sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'length' && document.pointerLockElement === canvas);
+  await page.mouse.move(700, 400, { steps: 5 });
+  await frame();
+  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[2], anchor: preview.anchorPoint, valid: preview.valid }));
+  assert.ok(result.length >= 1.5 && result.length < 40, 'A short drag produces a bounded, useful length');
+  assert.deepEqual(result.anchor, [0, 10, 0]);
+  assert.equal(result.valid, true);
+  await page.mouse.up();
+});
+
+test('precision controls stay out of the scene until explicitly opened', async () => {
+  assert.equal(await page.locator('.layoutControls').isVisible(), false);
+  await page.keyboard.press('c');
+  assert.equal(await page.locator('#fields [data-field="layoutSpacing"]').isVisible(), true);
+  assert.equal(await page.locator('#fields [data-field="snap"]').isVisible(), true);
+});
+
+async function selectedBoardScene(extraPieces = []) {
+  await page.mouse.move(640, 400);
+  await page.evaluate(extraPieces => {
+    equip(0);
+    Object.assign(settings, defaults);
+    world = { name: 'Direct editing', pieces: [{ id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], placementAxis: 0, n: 'Loose plate', layer: 'Floor' }, ...extraPieces], groups: {}, guides: [], next: 10 };
+    history = []; future = []; selected = null;
+    eye = [48, 100, 300]; yaw = 0; pitch = -Math.atan((100 - 1.5) / 300);
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  }, extraPieces);
+  await frame();
+  await page.mouse.click(640, 400);
+  await frame();
+  assert.deepEqual(await page.evaluate(() => selected), { id: 1 });
+  assert.equal(await page.locator('#right').isVisible(), false, 'Selecting keeps detailed controls out of the scene');
+}
+
+test('an existing piece can be selected and resized by dragging its end', async () => {
+  await selectedBoardScene();
+  await page.evaluate(() => {
+    eye = [96, 100, 300]; yaw = 0; pitch = -Math.atan((100 - .75) / 300);
+    sceneDirty = mouse.dirty = true;
+  });
+  await frame();
+  assert.match(await page.locator('#placementOverlay').textContent(), /Drag end/);
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'length' && gesture.editId === 1);
+  await dragEndpoint(127.3);
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 128, 'Existing pieces use the same layout snapping');
+  await page.mouse.up();
+  const pieces = await page.evaluate(() => world.pieces);
+  assert.equal(pieces.length, 1, 'Resizing edits the existing object instead of duplicating it');
+  assert.equal(pieces[0].id, 1);
+  closeTo(pieces[0].s[0], 128, 'The new length is committed');
+  closeTo(pieces[0].c[0] - pieces[0].s[0] / 2, 0, 'The opposite end stays fixed');
+  await page.keyboard.press('Control+z');
+  closeTo(await page.evaluate(() => world.pieces[0].s[0]), 96, 'Undo restores the old length');
+});
+
+test('dragging an existing piece body moves it without changing dimensions', async () => {
+  await selectedBoardScene();
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'move');
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [32, 0, 0])));
+  await page.mouse.move(next[0], next[1], { steps: 5 });
+  await frame();
+  const previewState = await page.evaluate(() => ({ board: preview.boxes[0], original: world.pieces[0], valid: preview.valid }));
+  assert.equal(previewState.valid, true);
+  assert.ok(Math.abs(previewState.board.c[0] - 80) < .5, 'The board follows the drag plane');
+  assert.deepEqual(previewState.board.s, [96, 1.5, 5.5]);
+  closeTo(previewState.board.c[1], .75, 'Movement preserves the support elevation');
+  closeTo(previewState.original.c[0], 48, 'Changes remain reversible until release');
+  await page.mouse.up();
+  const pieces = await page.evaluate(() => world.pieces);
+  assert.equal(pieces.length, 1);
+  assert.deepEqual(pieces[0].s, [96, 1.5, 5.5]);
+  assert.ok(Math.abs(pieces[0].c[0] - 80) < .5);
+});
+
+test('a blocked edit leaves the original piece intact', async () => {
+  await selectedBoardScene([{ id: 2, g: null, c: [160, .75, 0], s: [32, 1.5, 5.5], n: 'Obstacle', layer: 'Floor' }]);
+  await page.mouse.down();
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [100, 0, 0])));
+  await page.mouse.move(next[0], next[1], { steps: 5 });
+  await frame();
+  assert.equal(await page.evaluate(() => preview.valid), false);
+  await page.mouse.up();
+  closeTo(await page.evaluate(() => world.pieces[0].c[0]), 48, 'Blocked movement does not alter the saved object');
+});
+
+test('Escape cancels an edit without losing the selected object', async () => {
+  await selectedBoardScene();
+  await page.mouse.down();
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [32, 0, 0])));
+  await page.mouse.move(next[0], next[1]);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  closeTo(await page.evaluate(() => world.pieces[0].c[0]), 48, 'Cancellation preserves the original location');
+  assert.equal(await page.evaluate(() => gesture), null);
+  await page.keyboard.press('w');
+  await page.waitForFunction(() => document.pointerLockElement === canvas);
+});
+
+test('a wall assembly moves as one object and keeps its editable recipe in sync', async () => {
+  await page.mouse.move(640, 400);
+  const before = await page.evaluate(() => {
+    equip(0); Object.assign(settings, defaults);
+    world = { name: 'Assembly edit', pieces: [], groups: {}, guides: [], next: 1 };
+    const id = addGroup('wall', { a: [0, 0], b: [96, 0], y: 0, stud: '2x6', oc: 16, height: 97.125, tops: 2, header: '2x10', openings: [] });
+    eye = [48, 50, 200]; yaw = 0; pitch = 0; sceneDirty = geometryDirty = mouse.dirty = true;
+    return { id, pieces: copy(world.pieces), group: copy(world.groups[id]) };
+  });
+  await frame();
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'move' && !!gesture.editGroup);
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [32, 0, 0])));
+  await page.mouse.move(next[0], next[1], { steps: 5 });
+  await frame();
+  assert.equal(await page.evaluate(() => preview.valid), true, 'Original connections inside the assembly remain allowed');
+  await page.mouse.up();
+  const after = await page.evaluate(id => ({ pieces: world.pieces, group: world.groups[id] }), before.id);
+  assert.equal(after.pieces.length, before.pieces.length);
+  const delta = after.group.a[0] - before.group.a[0];
+  assert.ok(delta > 31 && delta < 33);
+  closeTo(after.group.b[0] - before.group.b[0], delta, 'Both recipe endpoints move together');
+  for (let i = 0; i < after.pieces.length; i++) {
+    closeTo(after.pieces[i].c[0] - before.pieces[i].c[0], delta, 'Every component receives the same translation');
+    assert.deepEqual(after.pieces[i].s, before.pieces[i].s);
+  }
+  await page.keyboard.press('Control+z');
+  assert.deepEqual(await page.evaluate(id => world.groups[id], before.id), before.group);
+});
+
+test('an assembly drag cannot pass through another assembly', async () => {
+  await page.mouse.move(640, 400);
+  const before = await page.evaluate(() => {
+    equip(0); Object.assign(settings, defaults);
+    world = { name: 'Assembly collision', pieces: [], groups: {}, guides: [], next: 1 };
+    const shape = { a: [0, 0], b: [96, 0], y: 0, stud: '2x6', oc: 16, height: 97.125, tops: 2, header: '2x10', openings: [] };
+    const id = addGroup('wall', copy(shape));
+    addGroup('wall', { ...copy(shape), a: [160, 0], b: [256, 0] });
+    eye = [48, 50, 200]; yaw = 0; pitch = 0; sceneDirty = geometryDirty = mouse.dirty = true;
+    return { id, group: copy(world.groups[id]) };
+  });
+  await frame(); await page.mouse.down();
+  await page.waitForFunction(() => !!gesture?.editGroup);
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [100, 0, 0])));
+  await page.mouse.move(next[0], next[1], { steps: 5 });
+  await frame();
+  assert.equal(await page.evaluate(() => preview.valid), false);
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(id => world.groups[id], before.id), before.group);
+});
+
+test('turning midpoint and layout magnets off leaves the drag on the fine grid', async () => {
+  await beginPlateDrag({ snapMids: false, layoutSnap: false, snap: .0625 });
+  await dragEndpoint(95.3);
+  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[0], snap: preview.snapInfo }));
+  assert.equal(result.snap, null);
+  assert.ok(Math.abs(result.length - 95.3) < .25);
+  assert.notEqual(result.length, 96);
+  closeTo(result.length * 16, Math.round(result.length * 16), 'The endpoint stays on the 1/16-inch grid');
+  await page.mouse.up();
+});
+
+test('opening precision during an edit cancels the preview and restores the original drawing', async () => {
+  await selectedBoardScene();
+  const originalDraw = await page.evaluate(() => drawCounts[0]);
+  await page.mouse.down();
+  const next = await page.evaluate(() => project(vAdd(gesture.point, [32, 0, 0])));
+  await page.mouse.move(next[0], next[1]);
+  await frame();
+  await page.keyboard.press('c');
+  await page.mouse.up();
+  await frame();
+  assert.equal(await page.evaluate(() => gesture), null);
+  closeTo(await page.evaluate(() => world.pieces[0].c[0]), 48, 'Opening numeric controls does not commit an unfinished move');
+  assert.equal(await page.locator('#right').isVisible(), true);
+  assert.equal(await page.evaluate(() => drawCounts[0]), originalDraw, 'The original solid is drawn again after cancelling its preview');
 });

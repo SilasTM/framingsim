@@ -1,5 +1,15 @@
 # Changes
 
+## v4
+
+- Keep mouse look and WASD active while drawing to length; the starting grip stays fixed in world space.
+- Apply R direction changes and Shift+R reversal to the active drag, including on concrete. Foundation placement no longer overrides the chosen axis or truncates vertical sill dimensions.
+- Keep a panel's intended length axis when its width is larger than its drawn length.
+- Show direction and seating controls in the context bar. B cycles Outside / Center / Inside and updates an active drag; exact offsets remain in precision settings.
+- Seat a piece directly against a neighbor's top edge with the same base elevation and run alignment. Thin studs advance by one actual thickness, without a skipped slot.
+- Prefer butt joints over nearby layout marks and stop at the first blocking face instead of skipping to a farther piece.
+- Slow mouse look during Alt fine adjustment and remove artificial gaps around chalk references.
+
 ## v3
 
 - Use one aiming cursor; the first movement key or building click captures the mouse for continuous turning. Esc releases it and WASD resumes.

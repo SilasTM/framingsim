@@ -702,7 +702,7 @@ test('the first click captures the pointer and places the selected board', async
   closeTo(result.pieces[0].s[1], selectedLength, 'A click keeps the selected stud length');
 });
 
-test('a board drag captures the pointer and changes length while the camera remains fixed', async () => {
+test('a board drag changes length while mouse look remains available', async () => {
   await page.mouse.move(640, 400);
   await page.keyboard.press('5');
   await page.keyboard.press('r');
@@ -719,7 +719,7 @@ test('a board drag captures the pointer and changes length while the camera rema
   assert.equal(result.locked, true);
   assert.equal(result.pieces.length, 1, 'Releasing the drag places a board');
   assert.notEqual(result.pieces[0].s[0], initial.length, 'Dragging stretches the board');
-  closeTo(result.yaw, initial.yaw, 'Camera yaw is fixed while dragging');
+  assert.notEqual(result.yaw, initial.yaw, 'Mouse look keeps turning the screen while drawing');
   closeTo(result.pitch, initial.pitch, 'Camera pitch is fixed while dragging');
   assert.deepEqual(result.eye, initial.eye, 'Camera position is fixed while dragging');
 });
@@ -737,9 +737,11 @@ test('moving over the inventory does not turn the camera', async () => {
 async function frame() {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
+let dragPointer = { x: 640, y: 400 };
 
 async function plateScene(overrides = {}) {
   await page.mouse.move(640, 400);
+  dragPointer = { x: 640, y: 400 };
   await page.evaluate(overrides => {
     equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
     Object.assign(settings, defaults, overrides, { axis: 0, grip: 'Start', len: 96, repeat: 1, size: '2x6', flip: 0 });
@@ -759,13 +761,16 @@ async function beginPlateDrag(overrides) {
 }
 
 async function dragEndpoint(distance) {
-  const pixel = await page.evaluate(distance => {
+  const delta = await page.evaluate(distance => {
     const g = gesture;
     const T = g.vector || [0, 1, 2].map(i => i === g.axis ? 1 : 0);
-    return project(vAdd(g.point, vMul(T, distance + g.originMeasure - (g.editId ? g.initialAmount : 0))));
+    const target = vAdd(g.point, vMul(T, distance + g.aimBias)),D = vSub(target, eye);
+    const targetYaw = Math.atan2(D[0], -D[2]),targetPitch = Math.atan2(D[1], Math.hypot(D[0], D[2]));
+    const turn = Math.atan2(Math.sin(targetYaw - yaw), Math.cos(targetYaw - yaw));
+    return [turn / .0027, (pitch - targetPitch) / .0027];
   }, distance);
-  assert.ok(pixel, 'The fixture endpoint is in front of the camera');
-  await page.mouse.move(pixel[0], pixel[1], { steps: 5 });
+  dragPointer = { x: dragPointer.x + delta[0], y: dragPointer.y + delta[1] };
+  await page.mouse.move(dragPointer.x, dragPointer.y, { steps: 5 });
   await frame();
 }
 
@@ -835,10 +840,12 @@ test('custom spacing and offset accept fractions and control real drag snapping'
 test('Alt temporarily frees an active drag from both magnets and the grid', async () => {
   await beginPlateDrag();
   await dragEndpoint(95.3);
+  const pointerAmount = await page.evaluate(() => gesture.amount);
   await page.keyboard.down('Alt');
   await frame();
   const free = await page.evaluate(() => ({ length: preview.boxes[0].s[0], raw: gesture.amount }));
-  assert.ok(Math.abs(free.length - 95.3) < .25, 'Freehand follows the actual pointer within one screen pixel');
+  assert.ok(Math.abs(free.length - 95.3) < 1.5, 'Freehand follows the camera aim within one angular input pixel');
+  closeTo(free.length, pointerAmount, 'Toggling fine adjustment does not move the endpoint');
   closeTo(free.length, free.raw, 'Freehand applies neither grid rounding nor a magnetic snap');
   assert.equal(await page.evaluate(() => preview.snapInfo), null);
   await page.keyboard.up('Alt');
@@ -875,6 +882,7 @@ test('precision controls stay out of the scene until explicitly opened', async (
 
 async function selectedBoardScene(extraPieces = []) {
   await page.mouse.move(640, 400);
+  dragPointer = { x: 640, y: 400 };
   await page.evaluate(extraPieces => {
     equip(0);
     Object.assign(settings, defaults);
@@ -1010,9 +1018,10 @@ test('an assembly drag cannot pass through another assembly', async () => {
 test('turning midpoint and layout magnets off leaves the drag on the fine grid', async () => {
   await beginPlateDrag({ snapMids: false, layoutSnap: false, snap: .0625 });
   await dragEndpoint(95.3);
-  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[0], snap: preview.snapInfo }));
+  const result = await page.evaluate(() => ({ length: preview.boxes[0].s[0], snap: preview.snapInfo, raw: gesture.amount }));
   assert.equal(result.snap, null);
-  assert.ok(Math.abs(result.length - 95.3) < .25);
+  assert.ok(Math.abs(result.raw - 95.3) < 1.5, 'The camera aim follows the target within one angular input pixel');
+  closeTo(result.length, Math.round(result.raw * 16) / 16, 'Only the requested fine grid is applied to the actual aim');
   assert.notEqual(result.length, 96);
   closeTo(result.length * 16, Math.round(result.length * 16), 'The endpoint stays on the 1/16-inch grid');
   await page.mouse.up();
@@ -1032,4 +1041,217 @@ test('opening precision during an edit cancels the preview and restores the orig
   closeTo(await page.evaluate(() => world.pieces[0].c[0]), 48, 'Opening numeric controls does not commit an unfinished move');
   assert.equal(await page.locator('#right').isVisible(), true);
   assert.equal(await page.evaluate(() => drawCounts[0]), originalDraw, 'The original solid is drawn again after cancelling its preview');
+});
+
+test('WASD can move the camera during a length drag without moving its start', async () => {
+  await beginPlateDrag();
+  await dragEndpoint(63.5);
+  const before = await page.evaluate(() => ({ eye: [...eye], anchor: [...gesture.point] }));
+  await page.keyboard.down('d');
+  await page.waitForFunction(x => eye[0] > x + 3, before.eye[0]);
+  await page.keyboard.up('d');
+  const after = await page.evaluate(() => ({ eye: [...eye], anchor: [...gesture.point], valid: preview.valid }));
+  assert.notDeepEqual(after.eye, before.eye);
+  assert.deepEqual(after.anchor, before.anchor);
+  assert.equal(after.valid, true);
+  await page.mouse.up();
+  const board = await page.evaluate(() => world.pieces.find(b => b.id === 2));
+  closeTo(board.c[0] - board.s[0] / 2, before.anchor[0], 'The placed board still begins at the fixed world anchor');
+});
+
+test('R changes the active drag direction and Shift+R reverses it', async () => {
+  await beginPlateDrag();
+  await dragEndpoint(63.5);
+  await page.keyboard.press('r');
+  await frame();
+  const vertical = await page.evaluate(() => ({ axis: gesture.axis, board: preview.boxes[0], anchor: [...gesture.point] }));
+  assert.equal(vertical.axis, 1, 'The cached drag axis updates with R');
+  closeTo(vertical.board.s[1], 64, 'Turning preserves the drawn length');
+  closeTo(vertical.board.c[1] - vertical.board.s[1] / 2, 1.5, 'The rotated piece remains on the support');
+  await page.keyboard.press('r');
+  await page.keyboard.press('r');
+  await frame();
+  const anchor = await page.evaluate(() => [...gesture.point]);
+  await page.keyboard.press('Shift+r');
+  await frame();
+  const reversed = await page.evaluate(() => ({ axis: gesture.axis, board: preview.boxes[0], anchor: [...gesture.point], valid: preview.valid }));
+  assert.equal(reversed.axis, 0);
+  assert.deepEqual(reversed.anchor, anchor, 'Reversing keeps the same fixed start');
+  closeTo(reversed.board.c[0] + reversed.board.s[0] / 2, anchor[0], 'The board now extends in the opposite direction');
+  assert.equal(reversed.valid, true);
+  await page.mouse.up();
+});
+
+async function concreteScene() {
+  await page.mouse.move(640, 400); dragPointer = { x: 640, y: 400 };
+  await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 96, alignment: 'Center' });
+    world = { name: 'Concrete seating', pieces: [{ id: 1, g: 'G1', c: [96, -16, 0], s: [192, 48, 8], n: 'Foundation wall', layer: 'Foundation' }], groups: { G1: { kind: 'foundation', a: [0, 0], b: [192, 96], y: 8 } }, guides: [], next: 2 };
+    eye = [48, 100, 300]; yaw = 0; pitch = -Math.atan((100 - 8) / 300);
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await frame();
+}
+
+test('concrete does not override the chosen direction before or during drawing', async () => {
+  await concreteScene();
+  await page.keyboard.press('r'); await frame();
+  closeTo(await page.evaluate(() => preview.boxes[0].s[1]), 96, 'Vertical direction remains a full length board');
+  await page.keyboard.press('r'); await frame();
+  assert.equal(await page.evaluate(() => preview.boxes[0].placementAxis), 2, 'A sill can run across the wall');
+  await page.mouse.down(); await page.waitForFunction(() => gesture?.type === 'length');
+  await page.keyboard.press('r'); await frame();
+  assert.equal(await page.evaluate(() => gesture.axis), 0, 'The active concrete-supported drag can turn too');
+  closeTo(await page.evaluate(() => preview.boxes[0].s[0]), 96, 'Turning preserves the stock length before a drag');
+  await page.mouse.up();
+});
+
+test('B seats material flush outside, inside, or centered on concrete during a drag', async () => {
+  await concreteScene();
+  await page.mouse.down();
+  await page.waitForFunction(() => gesture?.type === 'length' && document.pointerLockElement === canvas);
+  await dragEndpoint(63.5);
+  for (const [mode, z] of [['Inside', 1.25], ['Outside', -1.25], ['Center', 0]]) {
+    await page.keyboard.press('b'); await frame();
+    const state = await page.evaluate(() => ({ mode: settings.alignment, board: preview.boxes[0], valid: preview.valid }));
+    assert.equal(state.mode, mode);
+    closeTo(state.board.c[2], z, `${mode} uses the selected concrete reference`);
+    closeTo(state.board.c[1] - state.board.s[1] / 2, 8, 'The sill remains exactly on top of concrete');
+    assert.equal(state.valid, true);
+    assert.match(await page.locator('#alignmentToggle').textContent(), new RegExp(mode));
+  }
+  await page.mouse.up();
+});
+
+test('top-edge inference places successive boards directly beside each other with no skipped slot', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 96 });
+    world = { name: 'Adjacent boards', pieces: [{ id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Existing sill', layer: 'Floor' }], groups: {}, guides: [], next: 2 };
+    const states = [];
+    for (const z of [2.6, 8.1]) {
+      const source = world.pieces.at(-1);
+      preview = buildGhost({ box: source, point: [0, 1.5, z], normal: [0, 1, 0] });
+      states.push({ valid: preview.valid, board: copy(preview.boxes[0]) });
+      finalizePrimitive();
+    }
+    return { states, pieces: world.pieces };
+  });
+  assert.equal(result.pieces.length, 3);
+  for (let i = 1; i < 3; i++) {
+    assert.equal(result.states[i - 1].valid, true);
+    closeTo(result.pieces[i].c[2] - result.pieces[i - 1].c[2], 5.5, 'Centers advance by exactly one board width');
+    closeTo(result.pieces[i].c[1], .75, 'Adjacent pieces retain the same seating elevation');
+  }
+});
+
+test('thin studs snap against the very next stud face instead of leaving one stud gap', async () => {
+  const pieces = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Standard stud'));
+    Object.assign(settings, defaults, { axis: 1, grip: 'Start', len: 96 });
+    world = { name: 'Stud pack', pieces: [{ id: 1, g: null, c: [0, 48, 0], s: [1.5, 96, 5.5], n: 'Existing stud', layer: 'Walls' }], groups: {}, guides: [], next: 2 };
+    for (const x of [.65, 2.15]) {
+      preview = buildGhost({ box: world.pieces.at(-1), point: [x, 96, 0], normal: [0, 1, 0] });
+      finalizePrimitive();
+    }
+    return world.pieces;
+  });
+  assert.equal(pieces.length, 3);
+  closeTo(pieces[1].c[0], 1.5, 'Second stud directly touches the first');
+  closeTo(pieces[2].c[0], 3, 'Third stud directly touches the second');
+  assert.ok(pieces.every(b => b.c[1] === 48), 'All studs sit at the same base elevation');
+});
+
+test('a butt joint takes priority over concrete layout marks', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 96, alignment: 'Center' });
+    const concrete = { id: 1, g: null, c: [96, -16, 0], s: [192, 48, 8], n: 'Foundation wall', layer: 'Foundation' };
+    world = { name: 'Butt on concrete', pieces: [concrete, { id: 2, g: null, c: [25, 8.75, 0], s: [50, 1.5, 5.5], n: 'First sill', layer: 'Floor' }], groups: {}, guides: [], next: 3 };
+    const state = buildGhost({ box: concrete, point: [49.9, 8, 3.5], normal: [0, 1, 0] });
+    return { board: state.boxes[0], valid: state.valid, label: state.snapInfo?.label };
+  });
+  assert.equal(result.valid, true);
+  closeTo(result.board.c[0] - result.board.s[0] / 2, 50, 'The start joins the neighbor at 50 inches instead of using the 48-inch layout mark');
+  assert.match(result.label, /Butt joint/);
+});
+
+test('length snapping stops at the first blocking piece instead of skipping to a farther one', async () => {
+  const state = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start' });
+    world.pieces = [{ id: 1, g: null, c: [100, .75, 0], s: [1.5, 1.5, 40], n: 'First rim', layer: 'Floor' }, { id: 2, g: null, c: [132, .75, 0], s: [1.5, 1.5, 40], n: 'Second rim', layer: 'Floor' }];
+    const state = lengthPreview({ base: { c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Joist', layer: 'Floor' }, axis: 0, point: [0, .75, 0], anchor: 0, grip: 'Start', startSign: 1, amount: 131.2 });
+    return { length: state.boxes[0].s[0], valid: state.valid, target: state.snapTarget };
+  });
+  assert.equal(state.valid, true);
+  closeTo(state.length, 99.25, 'The endpoint stays at the nearest physical joint');
+  assert.equal(state.target, 'First rim');
+});
+
+test('snapping beside a far end aligns the run instead of starting one whole board later', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 96 });
+    const existing = { id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Existing sill', layer: 'Floor' };
+    world = { name: 'Aligned neighbors', pieces: [existing], groups: {}, guides: [], next: 2 };
+    const state = buildGhost({ box: existing, point: [95.9, 1.5, 2.6], normal: [0, 1, 0] });
+    return { board: state.boxes[0], valid: state.valid };
+  });
+  assert.equal(result.valid, true);
+  closeTo(result.board.c[0] - result.board.s[0] / 2, 0, 'The adjacent board shares the existing start');
+  closeTo(result.board.c[0] + result.board.s[0] / 2, 96, 'The adjacent board shares the existing end');
+  closeTo(result.board.c[2], 5.5, 'It sits exactly one width beside the existing board');
+});
+
+test('R rotates a short panel using its intended length axis during drawing', async () => {
+  await page.mouse.move(640, 400); dragPointer = { x: 640, y: 400 };
+  await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Subfloor 4×8'));
+    Object.assign(settings, defaults, { width: 48, len: 24, depth: .75, flip: 0, grip: 'Start' });
+    world = { name: 'Short panel', pieces: [], groups: {}, guides: [], next: 1 };
+    eye = [0, 100, 300]; yaw = 0; pitch = -Math.atan(100 / 300);sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await page.keyboard.press('r'); await frame();
+  assert.equal(await page.evaluate(() => preview.boxes[0].placementAxis), 0);
+  await page.mouse.down(); await page.waitForFunction(() => gesture?.type === 'length');
+  await dragEndpoint(15.8);
+  await page.keyboard.press('r'); await frame();
+  const state = await page.evaluate(() => ({ axis: gesture.axis, board: preview.boxes[0], valid: preview.valid }));
+  assert.equal(state.axis, 2, 'The panel turns from X to Z');
+  closeTo(state.board.s[2], 16, 'The short drawn length stays the length after turning');
+  closeTo(state.board.s[0], 48, 'The sheet width is preserved');
+  assert.equal(state.valid, true);
+  await page.mouse.up();
+});
+
+test('Alt slows camera movement for fine length adjustment without an endpoint jump', async () => {
+  await beginPlateDrag(); await dragEndpoint(63.5);
+  const before = await page.evaluate(() => ({ raw: gesture.amount, yaw }));
+  await page.keyboard.down('Alt'); await frame();
+  closeTo(await page.evaluate(() => gesture.amount), before.raw, 'Entering fine adjustment preserves the current unsnapped endpoint');
+  dragPointer.x += 9;
+  await page.mouse.move(dragPointer.x, dragPointer.y); await frame();
+  const after = await page.evaluate(() => ({ raw: gesture.amount, yaw, snap: preview.snapInfo }));
+  assert.ok(after.yaw - before.yaw > .001 && after.yaw - before.yaw < .004, 'Fine adjustment uses a smaller camera step');
+  assert.ok(Math.abs(after.raw - before.raw) < 2, 'The length changes gradually');
+  assert.equal(after.snap, null);
+  await page.keyboard.up('Alt'); await page.mouse.up();
+});
+
+test('an occupied adjacent face is blocked without skipping to a gap or stacking above', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 96 });
+    const source = { id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'First sill', layer: 'Floor' };
+    world = { name: 'Occupied neighbor', pieces: [source, { ...copy(source), id: 2, c: [48, .75, 5.5], n: 'Second sill' }], groups: {}, guides: [], next: 3 };
+    preview = buildGhost({ box: source, point: [0, 1.5, 2.6], normal: [0, 1, 0] });
+    const result = { valid: preview.valid, board: copy(preview.boxes[0]) };
+    finalizePrimitive();return { ...result, count: world.pieces.length };
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.count, 2);
+  closeTo(result.board.c[2], 5.5, 'The intended neighboring slot stays selected');
+  closeTo(result.board.c[1], .75, 'Blocked inference does not silently stack the board');
 });

@@ -1,0 +1,13 @@
+{
+  "name": "framecraft-framing-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A standalone framing simulator with browser placement regression tests.",
+  "scripts": {
+    "dev": "python3 -m http.server 8000 --bind 0.0.0.0",
+    "test": "node --test tests/placement.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

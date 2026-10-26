@@ -1,0 +1,732 @@
+const assert = require('node:assert/strict');
+const { readFile } = require('node:fs/promises');
+const { existsSync } = require('node:fs');
+const http = require('node:http');
+const path = require('node:path');
+const { test, before, after, beforeEach, afterEach } = require('node:test');
+const { chromium } = require('playwright');
+
+let server;
+let browser;
+let page;
+let baseURL;
+let pageErrors;
+
+function closeTo(actual, expected, message) {
+  assert.ok(Math.abs(actual - expected) < 1e-7, `${message}: expected ${expected}, received ${actual}`);
+}
+
+before(async () => {
+  server = http.createServer(async (request, response) => {
+    if (request.url === '/favicon.ico') {
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.url !== '/' && request.url !== '/index.html') {
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      const content = await readFile(path.join(__dirname, '..', 'index.html'));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      response.end(content);
+    } catch (error) {
+      response.writeHead(500).end(error.message);
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  baseURL = `http://127.0.0.1:${server.address().port}`;
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+    || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+  browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+});
+
+after(async () => {
+  await browser?.close();
+  if (server) await new Promise(resolve => server.close(resolve));
+});
+
+beforeEach(async () => {
+  page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto(baseURL);
+  await page.waitForFunction(() => typeof finalizePrimitive === 'function' && viewport.w > 1);
+});
+
+afterEach(async () => {
+  await page?.close();
+  assert.deepEqual(pageErrors, [], 'The simulator must not raise browser errors');
+});
+
+test('a vertical stud follows the aimed position on a long plate', async () => {
+  const board = await page.evaluate(() => {
+    Object.assign(settings, defaults, { axis: 1, size: '2x6', len: 96 });
+    const plate = { id: 1, c: [96, .75, 0], s: [192, 1.5, 5.5], n: 'Bottom plate', layer: 'Walls' };
+    return placePrimitive(MATERIALS.find(item => item.name === 'Standard stud'), {
+      box: plate, point: [24, 1.5, 0], normal: [0, 1, 0],
+    });
+  });
+  closeTo(board.c[0], 24, 'Stud center follows the aim along the plate');
+  closeTo(board.c[2], 0, 'Stud depth is centered on the plate');
+  closeTo(board.c[1] - board.s[1] / 2, 1.5, 'Stud bottom touches the plate top');
+});
+
+test('snapping an End grip keeps its original anchor fixed', async () => {
+  const result = await page.evaluate(() => {
+    Object.assign(settings, defaults, { axis: 0, len: 96, grip: 'End', repeat: 1 });
+    world.pieces = [{ id: 1, c: [2, 10, 0], s: [4, 1.5, 5.5], n: 'Snap target', layer: 'General' }];
+    const result = lengthPreview({
+      base: { c: [52, 10, 0], s: [96, 1.5, 5.5], n: 'Test board', layer: 'General' },
+      axis: 0, anchor: 100, point: [100, 10, 0], grip: 'End',
+      amount: -95, startSign: 1, repeatAxis: 2,
+    });
+    return { board: result.boxes[0], snapped: result.snapTarget, valid: result.valid };
+  });
+  assert.equal(result.snapped, 'Snap target');
+  closeTo(result.board.s[0], 96, 'Length reaches the target face at X=4');
+  closeTo(result.board.c[0] + result.board.s[0] / 2, 100, 'End anchor stays at X=100');
+  closeTo(result.board.c[0] - result.board.s[0] / 2, 4, 'Free end reaches X=4');
+  assert.equal(result.valid, true, 'Face-to-face contact must be allowed');
+});
+
+for (const [grip, expectedMin, expectedMax] of [
+  ['Start', 0, 96], ['Center', -48, 48], ['End', -96, 0], ['Offset', -12, 84],
+]) {
+  test(`click placement preserves the selected length and ${grip} grip`, async () => {
+    const pieces = await page.evaluate(grip => {
+      equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+      Object.assign(settings, defaults, { axis: 0, size: '2x6', len: 96, grip, gripOffset: 12 });
+      world = { name: 'Click test', pieces: [], groups: {}, guides: [], next: 1 };
+      const hit = { box: null, point: [0, 0, 0], normal: [0, 1, 0] };
+      gesture = screenLengthStart({ clientX: viewport.w / 2, clientY: viewport.h / 2 }, hit);
+      gesture.moved = 0;
+      endCanvas({ button: 0 });
+      return world.pieces;
+    }, grip);
+    assert.equal(pieces.length, 1, 'A click places exactly one board');
+    closeTo(pieces[0].s[0], 96, 'The chosen 8-foot length is unchanged');
+    closeTo(pieces[0].c[0] - pieces[0].s[0] / 2, expectedMin, 'Start coordinate');
+    closeTo(pieces[0].c[0] + pieces[0].s[0] / 2, expectedMax, 'End coordinate');
+  });
+}
+
+test('repeat placement previews and rejects a collision in a later board', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, size: '2x6', len: 96, repeat: 2, oc: 16, allowOverlap: false });
+    world = {
+      name: 'Repeat test', groups: {}, guides: [], next: 2,
+      pieces: [{ id: 1, c: [48, .75, 16], s: [96, 1.5, 5.5], n: 'Existing joist', layer: 'Floor' }],
+    };
+    history = [];
+    preview = buildGhost({ box: null, point: [0, 0, 0], normal: [0, 1, 0] });
+    const wasValid = preview.valid;
+    const previewCount = preview.boxes.length;
+    finalizePrimitive();
+    return { wasValid, previewCount, pieceCount: world.pieces.length, undoCount: history.length };
+  });
+  assert.equal(result.previewCount, 2, 'Preview includes every repeated board');
+  assert.equal(result.wasValid, false, 'The blocked repeated board invalidates the whole placement');
+  assert.equal(result.pieceCount, 1, 'An invalid placement adds no boards');
+  assert.equal(result.undoCount, 0, 'A rejected placement does not add an undo checkpoint');
+});
+
+test('repeat placement prevents newly placed boards from overlapping each other', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, size: '2x6', len: 96, repeat: 2, oc: 1.5, allowOverlap: false });
+    preview = buildGhost({ box: null, point: [0, 0, 0], normal: [0, 1, 0] });
+    const valid = preview.valid;
+    finalizePrimitive();
+    return { valid, count: world.pieces.length };
+  });
+  assert.equal(result.valid, false, 'Boards wider than their repeat offset must be rejected');
+  assert.equal(result.count, 0, 'The intersecting batch is not placed');
+});
+
+test('turning off snapping preserves the aimed coordinate', async () => {
+  const result = await page.evaluate(() => {
+    Object.assign(settings, defaults, { snap: 1.5, snapping: true });
+    const hit = { box: null, point: [23.4, 0, 0], normal: [0, 1, 0] };
+    const snapped = axisAnchor(hit, 0);
+    settings.snapping = false;
+    const free = axisAnchor(hit, 0);
+    return { snapped, free };
+  });
+  closeTo(result.snapped, 24, 'Enabled snapping uses the selected grid increment');
+  closeTo(result.free, 23.4, 'Disabled snapping preserves the exact aim');
+});
+
+test('holding Alt temporarily bypasses snapping and releasing it restores snapping', async () => {
+  await page.evaluate(() => Object.assign(settings, defaults, { snap: 1.5, snapping: true }));
+  await page.keyboard.down('Alt');
+  const free = await page.evaluate(() => axisAnchor({ box: null, point: [23.4, 0, 0] }, 0));
+  await page.keyboard.up('Alt');
+  const snapped = await page.evaluate(() => axisAnchor({ box: null, point: [23.4, 0, 0] }, 0));
+  closeTo(free, 23.4, 'Alt disables grid snapping');
+  closeTo(snapped, 24, 'Releasing Alt restores grid snapping');
+});
+
+test('the demo renders, survives reload, and exports its actual project', async () => {
+  const initial = await page.evaluate(() => {
+    runDemo();
+    draw();
+    return {
+      count: world.pieces.length,
+      groups: Object.keys(world.groups).length,
+      invalidPieces: world.pieces.filter(piece => !piece.c.every(Number.isFinite) || !piece.s.every(value => value > 0)).length,
+      takeoffCount: takeoffRows().reduce((total, row) => total + row.count, 0),
+    };
+  });
+  assert.ok(initial.count > 100, 'The demo must contain real framing geometry');
+  assert.equal(initial.groups, 8);
+  assert.equal(initial.invalidPieces, 0);
+  assert.equal(initial.takeoffCount, initial.count);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => document.querySelector('#saveBtn').click());
+  const download = await downloadPromise;
+  const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
+  assert.equal(exported.format, 'FrameCraft');
+  assert.equal(exported.world.pieces.length, initial.count);
+
+  await page.reload();
+  assert.equal(await page.evaluate(() => world.pieces.length), initial.count, 'Autosaved pieces are restored');
+  assert.equal(await page.evaluate(() => world.name), 'Sample One-Storey Frame');
+});
+
+test('placement supports undo and redo without losing the board dimensions', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, size: '2x6', len: 96 });
+    preview = buildGhost({ box: null, point: [0, 0, 0], normal: [0, 1, 0] });
+    finalizePrimitive();
+    const placed = copy(world.pieces);
+    undo();
+    const undoneCount = world.pieces.length;
+    redo();
+    return { placed, undoneCount, restored: world.pieces };
+  });
+  assert.equal(result.placed.length, 1);
+  assert.equal(result.undoneCount, 0);
+  assert.deepEqual(result.restored, result.placed);
+});
+
+test('every loose material preserves its stock dimensions and grip when clicked on each face', async context => {
+  const result = await page.evaluate(() => {
+    const failures = [];
+    let checked = 0;
+    const almost = (a, b) => Math.abs(a - b) < 1e-7;
+    const stock = MATERIALS.map((item, index) => ({ ...item, index }))
+      .filter(item => ['lumber', 'primitive', 'panel'].includes(item.kind));
+    for (const item of stock) {
+      equip(item.index);
+      for (const axis of item.kind === 'panel' ? [0] : [0, 1, 2]) {
+        for (const flip of [0, 1]) {
+          for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+            for (const face of [0, 1, 2]) {
+              for (const side of [-1, 1]) {
+                checked++;
+                world = { name: 'Stock test', pieces: [], groups: {}, guides: [], next: 1 };
+                history = [];
+                Object.assign(settings, defaults, {
+                  axis, flip, grip, gripOffset: 12, snapping: false, allowOverlap: true,
+                  len: item.L, width: item.w, depth: item.kind === 'panel' ? item.thick : item.d,
+                  size: item.size || defaults.size,
+                });
+                const normal = [0, 0, 0];
+                normal[face] = side;
+                const point = [24, 36, 48];
+                point[face] = side * 240;
+                const hit = {
+                  box: { c: [0, 0, 0], s: [480, 480, 480], n: 'Test support', layer: 'General' },
+                  point, normal,
+                };
+                gesture = screenLengthStart({}, hit);
+                endCanvas({ button: 0 });
+                const board = world.pieces[0];
+                const context = `${item.name}, axis ${axis}, flip ${flip}, ${grip}, face ${'XYZ'[face]}${side}`;
+                if (!board || world.pieces.length !== 1) {
+                  failures.push(`${context}: click did not place exactly one piece`);
+                  continue;
+                }
+                let expected;
+                let run = axis;
+                if (item.kind === 'panel') {
+                  const cross = [0, 1, 2].filter(i => i !== face);
+                  expected = [0, 0, 0];
+                  expected[face] = item.thick;
+                  expected[cross[0]] = flip ? item.L : item.w;
+                  expected[cross[1]] = flip ? item.w : item.L;
+                  run = cross.find(i => expected[i] === item.L);
+                } else {
+                  const section = item.kind === 'lumber' ? sizes[item.size] : [item.w, item.d];
+                  const cross = [0, 1, 2].filter(i => i !== axis);
+                  expected = [0, 0, 0];
+                  expected[axis] = item.L;
+                  expected[cross[0]] = section[flip ? 1 : 0];
+                  expected[cross[1]] = section[flip ? 0 : 1];
+                }
+                if (!board.s.every((value, i) => almost(value, expected[i]))) {
+                  failures.push(`${context}: dimensions ${board.s} differ from stock ${expected}`);
+                }
+                const anchor = point[run];
+                const direction = item.kind !== 'panel' && face === run ? side : 1;
+                const fromStart = grip === 'Start' ? 0 : grip === 'Center' ? item.L / 2 : grip === 'End' ? item.L : 12;
+                const actualAnchor = board.c[run] + direction * (fromStart - item.L / 2);
+                if (!almost(actualAnchor, anchor)) failures.push(`${context}: grip anchor ${actualAnchor} moved from ${anchor}`);
+                if (!board.c.every(Number.isFinite)) failures.push(`${context}: invalid position`);
+              }
+            }
+          }
+        }
+      }
+    }
+    return { checked, materialCount: stock.length, failures: failures.slice(0, 20), failureCount: failures.length };
+  });
+  assert.ok(result.materialCount >= 25, 'The catalog must exercise all of the uploaded loose materials');
+  assert.ok(result.checked >= 3000, 'The matrix covers all grips, axes, cross-sections, and face normals');
+  assert.equal(result.failureCount, 0, `${result.failureCount}/${result.checked} stock placement failures:\n${result.failures.join('\n')}`);
+  context.diagnostic(`${result.checked} click placements across ${result.materialCount} materials`);
+});
+
+test('angled chalk placement keeps horizontal boards and panels on their grip point', async () => {
+  const result = await page.evaluate(() => {
+    const failures = [];
+    let checked = 0;
+    const guide = { id: 1, a: [10, 0, 20], b: [130, 0, 180] };
+    const T = [.6, 0, .8];
+    const attach = [70, 0, 100];
+    for (const name of ['Pressure-treated sill', 'Custom dimension timber', 'Subfloor 4×8']) {
+      for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+        checked++;
+        world = { name: 'Chalk test', pieces: [], groups: {}, guides: [guide], next: 2 };
+        history = [];
+        equip(MATERIALS.findIndex(item => item.name === name));
+        Object.assign(settings, { axis: 0, grip, gripOffset: 12, len: 96, repeat: 1, snapping: false, alignment: 'Center' });
+        const hit = { box: lineGuideBox(guide), guide, point: attach, normal: [0, 1, 0] };
+        gesture = screenLengthStart({}, hit);
+        endCanvas({ button: 0 });
+        const board = world.pieces[0];
+        if (!board) { failures.push(`${name}/${grip}: no board`); continue; }
+        const fromStart = grip === 'Start' ? 0 : grip === 'Center' ? 48 : grip === 'End' ? 96 : 12;
+        const anchor = [board.c[0] + T[0] * (fromStart - 48), board.c[2] + T[2] * (fromStart - 48)];
+        if (Math.abs(anchor[0] - attach[0]) > 1e-7 || Math.abs(anchor[1] - attach[2]) > 1e-7) failures.push(`${name}/${grip}: anchor moved to ${anchor}`);
+        if (Math.abs(board.s[0] - 96) > 1e-7) failures.push(`${name}/${grip}: length changed`);
+        const endA = transformPoint(board, [-48, 0, 0]);
+        const endB = transformPoint(board, [48, 0, 0]);
+        const direction = endB.map((value, i) => (value - endA[i]) / 96);
+        if (direction.some((value, i) => Math.abs(value - T[i]) > 1e-7)) failures.push(`${name}/${grip}: board no longer follows the angled line`);
+      }
+    }
+    return { checked, failures };
+  });
+  assert.equal(result.checked, 12);
+  assert.deepEqual(result.failures, []);
+});
+
+test('a vertical board on a chalk line respects all four grip points', async () => {
+  const result = await page.evaluate(() => {
+    const guide = { id: 1, a: [10, 20, 20], b: [130, 20, 180] };
+    const failures = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+      world = { name: 'Chalk stud test', pieces: [], groups: {}, guides: [guide], next: 2 };
+      history = [];
+      equip(MATERIALS.findIndex(item => item.name === 'Standard stud'));
+      Object.assign(settings, { axis: 1, grip, gripOffset: 12, len: 96, repeat: 1, snapping: false, alignment: 'Center' });
+      gesture = screenLengthStart({}, { box: lineGuideBox(guide), guide, point: [70, 20, 100], normal: [0, 1, 0] });
+      endCanvas({ button: 0 });
+      const board = world.pieces[0];
+      const fromStart = grip === 'Start' ? 0 : grip === 'Center' ? 48 : grip === 'End' ? 96 : 12;
+      const actualAnchor = board.c[1] - 48 + fromStart;
+      if (Math.abs(actualAnchor - 20) > 1e-7) failures.push(`${grip}: vertical grip moved from Y=20 to Y=${actualAnchor}`);
+    }
+    return failures;
+  });
+  assert.deepEqual(result, []);
+});
+
+test('dragging along an angled chalk line locks the grip and preserves cross-section', async () => {
+  const result = await page.evaluate(() => {
+    const guide = { id: 1, a: [10, 0, 20], b: [130, 0, 180] };
+    const T = [.6, 0, .8];
+    const failures = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+      world = { name: 'Chalk drag test', pieces: [], groups: {}, guides: [guide], next: 2 };
+      equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+      Object.assign(settings, { axis: 0, grip, gripOffset: 12, len: 96, repeat: 1, snapping: false, alignment: 'Center' });
+      const g = screenLengthStart({}, { box: lineGuideBox(guide), guide, point: [70, 0, 100], normal: [0, 1, 0] });
+      g.amount = 120;
+      const preview = lengthPreview(g);
+      const board = preview.boxes[0];
+      const expectedLength = grip === 'Center' ? 240 : grip === 'Offset' ? 132 : 120;
+      if (Math.abs(board.s[0] - expectedLength) > 1e-7) failures.push(`${grip}: wrong stretched length`);
+      const ends = [-1, 1].map(sign => {
+        const p = transformPoint(board, [sign * board.s[0] / 2, 0, 0]);
+        return (p[0] - g.point[0]) * T[0] + (p[2] - g.point[2]) * T[2];
+      }).sort((a, b) => a - b);
+      const expectedStart = grip === 'Center' ? -120 : grip === 'Offset' ? -12 : 0;
+      if (Math.abs(ends[0] - expectedStart) > 1e-7 || Math.abs(ends[1] - 120) > 1e-7) failures.push(`${grip}: endpoints ${ends} do not keep the fixed grip`);
+      if (Math.abs(board.c[1] - g.point[1]) > 1e-7 || Math.abs(board.s[1] - 1.5) > 1e-7 || Math.abs(board.s[2] - 5.5) > 1e-7) failures.push(`${grip}: cross-section or height changed`);
+    }
+    return failures;
+  });
+  assert.deepEqual(result, []);
+});
+
+test('repeating angled boards uses exact on-center spacing perpendicular to their run', async () => {
+  const result = await page.evaluate(() => {
+    const guide = { id: 1, a: [10, 0, 20], b: [130, 0, 180] };
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, { axis: 0, grip: 'Start', len: 96, repeat: 3, oc: 16, snapping: false, alignment: 'Center' });
+    preview = buildGhost({ box: lineGuideBox(guide), guide, point: [70, 0, 100], normal: [0, 1, 0] });
+    const valid = preview.valid;
+    finalizePrimitive();
+    return { valid, pieces: world.pieces };
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.pieces.length, 3);
+  for (let i = 1; i < result.pieces.length; i++) {
+    const previous = result.pieces[i - 1];
+    const current = result.pieces[i];
+    closeTo(current.c[0] - previous.c[0], -.8 * 16, 'Perpendicular spacing X');
+    closeTo(current.c[2] - previous.c[2], .6 * 16, 'Perpendicular spacing Z');
+    assert.deepEqual(current.s, previous.s);
+    assert.deepEqual(current.r, previous.r);
+  }
+});
+
+test('snap controls and the N shortcut persist their state after reload', async () => {
+  await page.locator('#snapStep').selectOption('0.25');
+  await page.locator('#snapToggle').click();
+  assert.equal(await page.locator('#snapToggle').getAttribute('aria-pressed'), 'false');
+  await page.reload();
+  assert.equal(await page.locator('#snapStep').inputValue(), '0.25');
+  assert.equal(await page.locator('#snapToggle').getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('n');
+  assert.equal(await page.locator('#snapToggle').getAttribute('aria-pressed'), 'true');
+  await page.reload();
+  assert.equal(await page.locator('#snapToggle').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#snapStep').inputValue(), '0.25');
+});
+
+test('focusing a settings control stops held flight movement', async () => {
+  await page.keyboard.down('w');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.locator('#snapStep').focus();
+  const beforeFocusTicks = await page.evaluate(() => [...eye]);
+  const afterFocusTicks = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve([...eye])))));
+  await page.keyboard.up('w');
+  assert.deepEqual(afterFocusTicks, beforeFocusTicks, 'Camera movement pauses while a precision control has focus');
+});
+
+test('user-placed loose boards block a later overlapping placement', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, len: 96, allowOverlap: false });
+    const hit = { box: null, point: [0, 0, 0], normal: [0, 1, 0] };
+    preview = buildGhost(hit);
+    finalizePrimitive();
+    const firstGroup = world.pieces[0].g;
+    preview = buildGhost(hit);
+    const secondValid = preview.valid;
+    finalizePrimitive();
+    return { firstGroup, secondValid, count: world.pieces.length };
+  });
+  assert.equal(result.firstGroup, null, 'The fixture uses a real loose board, not an assembly');
+  assert.equal(result.secondValid, false, 'A loose board must participate in collision detection');
+  assert.equal(result.count, 1, 'The overlapping board is not placed');
+});
+
+test('loose materials rest flush on the ground in every axis and cross-section orientation', async () => {
+  const failures = await page.evaluate(() => {
+    const failures = [];
+    for (let index = 0; index < MATERIALS.length; index++) {
+      const item = MATERIALS[index];
+      if (!['lumber', 'primitive', 'panel'].includes(item.kind)) continue;
+      for (const axis of item.kind === 'panel' ? [0] : [0, 1, 2]) {
+        for (const flip of [0, 1]) {
+          equip(index);
+          Object.assign(settings, { axis, flip, grip: 'Start', snapping: true, repeat: 1 });
+          const hit = { box: null, point: [0, 0, 0], normal: [0, 1, 0] };
+          const board = item.kind === 'panel' ? placePanel(item, hit) : placePrimitive(item, hit);
+          const bottom = board.c[1] - board.s[1] / 2;
+          if (Math.abs(bottom) > 1e-7) failures.push(`${item.name}/axis ${axis}/flip ${flip}: bottom is ${bottom}, expected ground Y=0`);
+        }
+      }
+    }
+    return failures;
+  });
+  assert.deepEqual(failures, []);
+});
+
+test('horizontal boards meet both sides of a support flush in every alignment mode', async () => {
+  const failures = await page.evaluate(() => {
+    const failures = [];
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    for (const alignment of ['Outside', 'Center', 'Inside', 'Custom']) {
+      for (const side of [-1, 1]) {
+        Object.assign(settings, defaults, { axis: 0, len: 48, alignment, faceOffset: 4 });
+        const support = { id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Existing plate', layer: 'Floor' };
+        world.pieces = [support];
+        const hit = { box: support, point: [24, .75, side * 2.75], normal: [0, 0, side] };
+        const result = buildGhost(hit);
+        const board = result.boxes[0];
+        const contact = board.c[2] - side * board.s[2] / 2;
+        if (Math.abs(contact - side * 2.75) > 1e-7) failures.push(`${alignment}/${side}: board misses support face (${contact})`);
+        if (!result.valid) failures.push(`${alignment}/${side}: touching faces were blocked`);
+      }
+    }
+    return failures;
+  });
+  assert.deepEqual(failures, []);
+});
+
+test('horizontal boards attach to the underside of a support without a gap or depth drift', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, len: 48 });
+    const support = { id: 1, g: null, c: [48, 10, 0], s: [96, 1.5, 5.5], n: 'Existing plate', layer: 'Floor' };
+    world.pieces = [support];
+    const preview = buildGhost({ box: support, point: [24, 9.25, 0], normal: [0, -1, 0] });
+    return { board: preview.boxes[0], valid: preview.valid };
+  });
+  closeTo(result.board.c[1] + result.board.s[1] / 2, 9.25, 'Board top meets the support underside');
+  closeTo(result.board.c[2], 0, 'Board depth is aligned to the support center');
+  assert.equal(result.valid, true);
+});
+
+test('measurement input accepts precise framing dimensions and rejects malformed numbers', async () => {
+  const valid = [
+    ['0', 0], ['96', 96], ['.5', .5], ['8.125', 8.125], ['1/2', .5], ['8 1/8', 8.125],
+    ['8-1/8', 8.125], ['8\'', 96], ['8′ 1 1/8″', 97.125], ['8 ft 3 in', 99],
+    ['1.5 feet', 18], [' -1′ 2 1/2″ ', -14.5], ['−1′ 2″', -14], ['+ 2 3/4 in', 2.75],
+  ];
+  for (const [input, expected] of valid) {
+    const result = await page.evaluate(input => parseInches(input), input);
+    closeTo(result, expected, `Measurement ${JSON.stringify(input)}`);
+  }
+  for (const input of ['', 'abc', '12abc', '1e3', '3/0', '2.3.4', '--1', '8′ 1 2', '1\'\'', 'NaN', 'Infinity', '1/2/3']) {
+    const validNumber = await page.evaluate(input => Number.isFinite(parseInches(input)), input);
+    assert.equal(validNumber, false, `${JSON.stringify(input)} must be rejected`);
+  }
+});
+
+test('roof panels follow a sloped support and touch its surface exactly', async () => {
+  const results = await page.evaluate(() => {
+    const target = { id: 1, g: null, c: [0, 100, 0], s: [96, .5, 144], r: [-Math.atan(.5), 0, 0], n: 'Roof sheathing', layer: 'Roof' };
+    const point = transformPoint(target, [20, .25, 40]);
+    const normal = axesRotation(target).map(row => row[1]);
+    const results = [];
+    for (const flip of [0, 1]) {
+      equip(MATERIALS.findIndex(item => item.name === 'Roof sheathing 4×8'));
+      Object.assign(settings, defaults, { width: 48, len: 96, depth: .5, flip, grip: 'Center', snapping: false, alignment: 'Center' });
+      world.pieces = [target];
+      const board = placePanel(current(), { box: target, point, normal, axis: 1 });
+      results.push({
+        flip, board, overlap: obbOverlap(board, target),
+        offset: dot(vSub(board.c, point), normal),
+      });
+    }
+    return { results, rotation: target.r };
+  });
+  for (const { flip, board, overlap, offset } of results.results) {
+    assert.deepEqual(board.s, flip ? [96, .5, 48] : [48, .5, 96]);
+    assert.deepEqual(board.r, results.rotation, 'Panel follows the slope of the surface');
+    closeTo(offset, .25, 'Panel center is half its thickness beyond the support face');
+    assert.equal(overlap, false, 'Sloped sheets may touch but must not intersect');
+  }
+});
+
+test('a diagonal joist snaps to the actual rim face rather than penetrating its center', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 99.25, snap: .25, snapping: true });
+    const T = [Math.SQRT1_2, 0, Math.SQRT1_2];
+    const ref = [0, .75, 0];
+    world.pieces = [{ id: 1, g: null, c: [T[0] * 100, .75, T[2] * 100], s: [1.5, 1.5, 40], r: [0, -Math.PI / 4, 0], n: 'Rim board', layer: 'Floor' }];
+    const base = {
+      c: [T[0] * 49.625, .75, T[2] * 49.625], s: [99.25, 1.5, 5.5], r: [0, -Math.PI / 4, 0],
+      placementAxis: 0, guideVector: T, guideOrigin: [0, 0, 0], startSign: 1, grip: 'Start', n: 'Test joist', layer: 'Floor',
+    };
+    const preview = lengthPreview({ base, axis: 0, vector: T, point: ref, anchor: 0, grip: 'Start', amount: 99.25, startSign: 1 });
+    return { board: preview.boxes[0], valid: preview.valid, anchor: preview.anchorPoint, endpoint: preview.targetPoint };
+  });
+  closeTo(result.board.s[0], 99.25, 'The joist ends at the near face of the rim');
+  assert.deepEqual(result.anchor, [0, .75, 0]);
+  closeTo(result.endpoint[0], Math.SQRT1_2 * 99.25, 'Endpoint X');
+  closeTo(result.endpoint[2], Math.SQRT1_2 * 99.25, 'Endpoint Z');
+  assert.equal(result.valid, true, 'A flush diagonal joint must be placeable');
+});
+
+test('an axis-aligned joist prefers the rim face over its overlapping center', async () => {
+  const result = await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Pressure-treated sill'));
+    Object.assign(settings, defaults, { axis: 0, grip: 'Start', len: 100, snap: .25, snapping: true });
+    world.pieces = [{ id: 1, g: null, c: [100, .75, 0], s: [1.5, 1.5, 40], n: 'Rim board', layer: 'Floor' }];
+    const base = { c: [50, .75, 0], s: [100, 1.5, 5.5], placementAxis: 0, startSign: 1, grip: 'Start', n: 'Test joist', layer: 'Floor' };
+    const preview = lengthPreview({ base, axis: 0, point: [0, .75, 0], anchor: 0, grip: 'Start', amount: 100, startSign: 1 });
+    return { length: preview.boxes[0].s[0], valid: preview.valid, endpoint: preview.targetPoint };
+  });
+  closeTo(result.length, 99.25, 'The board ends at the face, before the rim center');
+  closeTo(result.endpoint[0], 99.25, 'The free end meets the near rim face');
+  assert.equal(result.valid, true, 'The face joint remains placeable');
+});
+
+test('vertical studs repeated on an angled chalk line follow its on-center marks', async () => {
+  const result = await page.evaluate(() => {
+    const guide = { id: 1, a: [10, 0, 20], b: [130, 0, 180] };
+    equip(MATERIALS.findIndex(item => item.name === 'Standard stud'));
+    Object.assign(settings, defaults, { axis: 1, grip: 'Start', len: 96, repeat: 3, oc: 16, snapping: false });
+    preview = buildGhost({ box: lineGuideBox(guide), guide, point: [70, 0, 100], normal: [0, 1, 0] });
+    const valid = preview.valid;
+    finalizePrimitive();
+    return { valid, pieces: world.pieces };
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.pieces.length, 3);
+  for (let i = 1; i < result.pieces.length; i++) {
+    closeTo(result.pieces[i].c[0] - result.pieces[i - 1].c[0], .6 * 16, 'Stud on-center offset X');
+    closeTo(result.pieces[i].c[2] - result.pieces[i - 1].c[2], .8 * 16, 'Stud on-center offset Z');
+  }
+});
+
+test('flipped panels on a chalk line keep their grip and stretch along their rotated length', async () => {
+  const failures = await page.evaluate(() => {
+    const guide = { id: 1, a: [10, 0, 20], b: [130, 0, 180] };
+    const attach = [70, 0, 100];
+    const N = [-.8, 0, .6];
+    const failures = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+      equip(MATERIALS.findIndex(item => item.name === 'Subfloor 4×8'));
+      Object.assign(settings, defaults, { width: 48, depth: .75, len: 96, flip: 1, grip, gripOffset: 12, snapping: false });
+      world = { name: 'Flipped panel test', pieces: [], groups: {}, guides: [guide], next: 2 };
+      history = [];
+      const hit = { box: lineGuideBox(guide), guide, point: attach, normal: [0, 1, 0] };
+      gesture = screenLengthStart({}, hit);
+      const g = gesture;
+      endCanvas({ button: 0 });
+      const placed = world.pieces[0];
+      if (!placed || placed.s.some((value, i) => Math.abs(value - [48, .75, 96][i]) > 1e-7)) {
+        failures.push(`${grip}: panel flip did not exchange width and length`);
+        continue;
+      }
+      const offset = grip === 'Start' ? 0 : grip === 'Center' ? 48 : grip === 'End' ? 96 : 12;
+      const anchor = transformPoint(placed, [0, 0, offset - 48]);
+      if (Math.abs(anchor[0] - attach[0]) > 1e-7 || Math.abs(anchor[2] - attach[2]) > 1e-7) failures.push(`${grip}: click grip moved`);
+      world.pieces = [];
+      g.amount = 120;
+      const dragged = lengthPreview(g).boxes[0];
+      const expectedLength = grip === 'Center' ? 240 : grip === 'Offset' ? 132 : 120;
+      if (Math.abs(dragged.s[2] - expectedLength) > 1e-7 || Math.abs(dragged.s[0] - 48) > 1e-7) failures.push(`${grip}: dragging changed the width rather than length`);
+      const endpoint = transformPoint(dragged, [0, 0, dragged.s[2] / 2]);
+      if (Math.abs(endpoint[0] - (g.point[0] + N[0] * 120)) > 1e-7 || Math.abs(endpoint[2] - (g.point[2] + N[2] * 120)) > 1e-7) failures.push(`${grip}: free end left its rotated length axis`);
+    }
+    return failures;
+  });
+  assert.deepEqual(failures, []);
+});
+
+test('dragging a sloped roof panel preserves its support plane and fixed grip', async () => {
+  const failures = await page.evaluate(() => {
+    const target = { id: 1, g: null, c: [0, 100, 0], s: [96, .5, 144], r: [-Math.atan(.5), 0, 0], n: 'Roof sheathing', layer: 'Roof' };
+    const point = transformPoint(target, [20, .25, 40]);
+    const rotation = axesRotation(target);
+    const normal = rotation.map(row => row[1]);
+    const failures = [];
+    for (const flip of [0, 1]) {
+      for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+        equip(MATERIALS.findIndex(item => item.name === 'Roof sheathing 4×8'));
+        Object.assign(settings, defaults, { width: 48, len: 96, depth: .5, flip, grip, gripOffset: 12, snapping: false });
+        world.pieces = [];
+        const g = screenLengthStart({}, { box: target, point, normal, axis: 1 });
+        g.amount = 120;
+        const board = lengthPreview(g).boxes[0];
+        const axis = flip ? 0 : 2;
+        const direction = rotation.map(row => row[axis]);
+        const expectedLength = grip === 'Center' ? 240 : grip === 'Offset' ? 132 : 120;
+        const half = board.s.map(value => value / 2);
+        const endLocal = [0, 0, 0];
+        endLocal[axis] = half[axis];
+        const end = transformPoint(board, endLocal);
+        if (Math.abs(board.s[axis] - expectedLength) > 1e-7) failures.push(`${flip}/${grip}: stretched the wrong dimension`);
+        const delta = end.map((value, i) => value - g.point[i] - direction[i] * 120);
+        if (delta.some(value => Math.abs(value) > 1e-7)) failures.push(`${flip}/${grip}: free end left the support length axis`);
+        const normalOffset = dot(vSub(board.c, point), normal);
+        if (Math.abs(normalOffset - .25) > 1e-7) failures.push(`${flip}/${grip}: panel left the support plane (normal offset ${normalOffset})`);
+      }
+    }
+    return failures;
+  });
+  assert.deepEqual(failures, []);
+});
+
+test('mouse look and WASD work immediately without capturing the pointer', async () => {
+  await page.mouse.move(640, 400);
+  const initial = await page.evaluate(() => ({ yaw, pitch, eye: [...eye], locked: !!document.pointerLockElement }));
+  await page.mouse.move(700, 430);
+  const looked = await page.evaluate(() => ({ yaw, pitch, locked: !!document.pointerLockElement }));
+  assert.equal(initial.locked, false);
+  assert.equal(looked.locked, false);
+  assert.notEqual(looked.yaw, initial.yaw, 'Moving the free pointer changes camera yaw');
+  assert.notEqual(looked.pitch, initial.pitch, 'Moving the free pointer changes camera pitch');
+  await page.keyboard.down('w');
+  const moved = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve([...eye])))));
+  await page.keyboard.up('w');
+  assert.ok(moved.some((value, i) => Math.abs(value - initial.eye[i]) > 1e-7), 'W flies without a prior canvas click');
+});
+
+test('the first unlocked click places the selected board', async () => {
+  await page.mouse.move(640, 400);
+  await page.keyboard.press('5');
+  const selectedLength = await page.evaluate(() => {
+    eye = [0, 120, 200]; yaw = 0; pitch = -.5;
+    sceneDirty = mouse.dirty = true;
+    return settings.len;
+  });
+  await page.mouse.click(640, 400);
+  const result = await page.evaluate(() => ({ pieces: world.pieces, locked: !!document.pointerLockElement }));
+  assert.equal(result.locked, false, 'Placing a board does not require capturing the mouse');
+  assert.equal(result.pieces.length, 1, 'The first click builds instead of being consumed by pointer capture');
+  closeTo(result.pieces[0].s[1], selectedLength, 'A click keeps the selected stud length');
+});
+
+test('an unlocked board drag changes length while the camera remains fixed', async () => {
+  await page.mouse.move(640, 400);
+  await page.keyboard.press('5');
+  await page.keyboard.press('r');
+  await page.keyboard.press('r');
+  const initial = await page.evaluate(() => {
+    eye = [150, 150, 250]; yaw = -.6; pitch = -.5;
+    sceneDirty = mouse.dirty = true;
+    return { yaw, pitch, eye: [...eye], length: settings.len };
+  });
+  await page.mouse.down();
+  await page.mouse.move(760, 400, { steps: 5 });
+  await page.mouse.up();
+  const result = await page.evaluate(() => ({ pieces: world.pieces, yaw, pitch, eye, locked: !!document.pointerLockElement }));
+  assert.equal(result.locked, false);
+  assert.equal(result.pieces.length, 1, 'Releasing the drag places a board');
+  assert.notEqual(result.pieces[0].s[0], initial.length, 'Dragging stretches the board');
+  closeTo(result.yaw, initial.yaw, 'Camera yaw is fixed while dragging');
+  closeTo(result.pitch, initial.pitch, 'Camera pitch is fixed while dragging');
+  assert.deepEqual(result.eye, initial.eye, 'Camera position is fixed while dragging');
+});
+
+test('moving over the inventory does not turn the camera', async () => {
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => document.body.classList.contains('showInventory'));
+  const before = await page.evaluate(() => ({ yaw, pitch }));
+  await page.mouse.move(450, 250);
+  await page.mouse.move(750, 500, { steps: 3 });
+  const after = await page.evaluate(() => ({ yaw, pitch }));
+  assert.deepEqual(after, before);
+});

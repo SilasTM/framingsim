@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>FrameCraft — Precision Freebuild v4</title>
+<title>FrameCraft — Precision Freebuild v5</title>
 <style>
 :root{--bg:#101820;--panel:#15212b;--panel2:#1a2934;--border:#324755;--txt:#eaf2f5;--sub:#91a8b4;--lime:#b7e077;--blue:#79baf0;--orange:#edb771;--red:#fb7974;--top:59px}
 *{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;background:#a0bbc9;color:var(--txt);font:13px/1.4 system-ui,"Segoe UI",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.35;cursor:default}
@@ -100,8 +100,8 @@ body.showInventory #precisionBar,body.showInspector #precisionBar,body.hasModal 
 #toast{top:66px;bottom:auto}
 @media(max-width:620px){#resumeHint{bottom:192px;max-width:90vw;width:max-content}}
 #scene{cursor:none;outline:none}
-body.mouseReleased #scene{cursor:default}
-body.mouseReleased #crosshair,body.dragging #crosshair,body.showInventory #crosshair,body.showInspector #crosshair,body.hasModal #crosshair{visibility:hidden}
+body.mouseReleased #scene{cursor:none}
+body.dragging #crosshair,body.showInventory #crosshair,body.showInspector #crosshair,body.hasModal #crosshair{visibility:hidden}
 #precisionBar input{pointer-events:auto;background:#233f46;color:#edf7ed;border:1px solid #6e9385;border-radius:6px;padding:5px 7px;font:inherit;width:68px}
 .layoutControls{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;flex-basis:100%;color:#b7cec3;font-weight:450}
 .layoutControls label{display:flex;align-items:center;gap:5px}
@@ -118,6 +118,14 @@ body.showInventory #placementOverlay,body.showInspector #placementOverlay,body.h
 #precisionSettings{pointer-events:auto}.precisionKeys{font-size:10px;opacity:.8}
 #resumeHint{bottom:170px}body.dragging #resumeHint{display:none}
 #snapFeedback{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+#alignmentToggle,#snapStatus{display:none!important}
+.seatChoices{display:flex;gap:3px;align-items:center}.seatChoices button{flex:1;background:#253d43;color:#dce9dc;border:1px solid #58766c;padding:6px 9px;border-radius:5px;cursor:pointer;font:inherit;white-space:nowrap}
+.seatChoices button[aria-pressed="true"]{background:#dff3c7;color:#203121;border-color:#dff3c7}
+.seatSection{margin:12px 0}.seatSection>label,.moveControls>label{display:flex;justify-content:space-between;align-items:center;font-weight:650;font-size:11px;color:#c0d1cc;margin-bottom:6px}
+.seatDiagram{display:block;width:145px;height:35px;margin:5px auto 0}
+.moveControls{margin:14px 0}.moveControls select,.moveControls input{width:100%;padding:8px;border:1px solid #567568;border-radius:6px;background:#10242b;color:#eaf4e6;font:inherit}.moveControls input{margin-top:6px}.moveControls small{display:block;margin-top:6px;color:#a3bdb1;font-size:10px}.moveButtons{display:flex;gap:6px;margin-top:6px}.moveButtons button{flex:1}
+.adjustDetails{border-top:1px solid #3e5658;margin-top:14px;padding-top:11px}.adjustDetails>summary{cursor:pointer;font-size:12px;color:#c7dbd2;font-weight:650;margin-bottom:10px}
+#precisionBar .seatChoices{pointer-events:auto}#moveReadout{font-size:11px}#precisionBar{max-width:96vw}
 </style></head>
 <body>
 <canvas id="scene" tabindex="0" aria-label="3D framing workspace"></canvas><div id="crosshair"></div>
@@ -133,7 +141,7 @@ body.showInventory #placementOverlay,body.showInspector #placementOverlay,body.h
 <div id="status">Ready to build</div><div id="toast"></div><input type="file" id="fileInput" accept=".json,application/json">
 <div id="quickbar"><div id="quickName">Select a material</div><div id="quickControls"><label id="sizeWrap">Size <select id="quickSize"></select></label><label id="lengthWrap">Length <input id="quickLength" spellcheck="false" value="12′" aria-label="Length in feet or inches"></label><button id="quickAxis" title="Turn board direction (R)">↻ X</button><button id="quickEdit" title="All options">⚙ More</button></div></div>
 <footer id="bottom"><button class="inventorySquare" id="inventoryBottom" title="Inventory (E)">▦</button><div class="hotbar" id="hotbar"></div><button class="inventorySquare" id="inspectorBottom" title="Selected object settings">⚙</button></footer>
-<div id="buildHint">WASD fly · Space ↑ Shift ↓ · Drag length · X grip · B align · T target · Right-click remove · E inventory</div><div id="precisionBar"><span id="placementReadout">Choose a material</span><div class="snapControls"><button id="snapToggle" aria-pressed="true" title="Toggle snapping (N)">Snap on · N</button><label for="snapStep">Grid</label><select id="snapStep" aria-label="Snap increment"></select><span id="snapStatus">Alt: freehand</span></div><button id="runDirection" title="R: change axis · Shift+R: reverse">X →</button><button id="alignmentToggle" title="B: Outside / Center / Inside · C: custom offset">Center</button><button id="precisionSettings">Precision · C</button><div class="layoutControls"><button id="snapEnds" aria-pressed="true">Ends</button><button id="snapMids" aria-pressed="true">Midpoints</button><button id="layoutSnap" aria-pressed="true">Layout</button><label>Every <input id="layoutSpacing" value="16″" aria-label="Layout spacing" spellcheck="false"></label><label>Offset <input id="layoutOffset" value="0″" aria-label="Layout offset" spellcheck="false"></label></div><span id="snapFeedback" role="status"></span><span class="precisionKeys">Hold left mouse & drag to length · R axis · E inventory</span></div><div id="resumeHint">WASD to move · Mouse to look<br><small>Mouse captures when you move · Esc releases it</small></div>
+<div id="buildHint">WASD fly · Space ↑ Shift ↓ · Drag length · X grip · B align · T target · Right-click remove · E inventory</div><div id="precisionBar"><span id="placementReadout">Choose a material</span><div class="snapControls"><button id="snapToggle" aria-pressed="true" title="Toggle snapping (N)">Snap on · N</button><label for="snapStep">Grid</label><select id="snapStep" aria-label="Snap increment"></select><span id="snapStatus">Alt: freehand</span></div><button id="runDirection" title="R: change axis · Shift+R: reverse">X →</button><button id="alignmentToggle" title="B: Outside / Center / Inside · C: custom offset">Center</button><div id="seatChoices" class="seatChoices" role="group" aria-label="Position on support"><button data-seat="Outside" aria-pressed="false">Outside</button><button data-seat="Center" aria-pressed="true">Middle</button><button data-seat="Inside" aria-pressed="false">Inside</button></div><button id="moveReadout" title="Wheel slides the piece · C: choose an amount">Wheel · material thickness</button><button id="precisionSettings">Adjust · C</button><div class="layoutControls"><button id="snapEnds" aria-pressed="true">Ends</button><button id="snapMids" aria-pressed="true">Midpoints</button><button id="layoutSnap" aria-pressed="true">Layout</button><label>Every <input id="layoutSpacing" value="16″" aria-label="Layout spacing" spellcheck="false"></label><label>Offset <input id="layoutOffset" value="0″" aria-label="Layout offset" spellcheck="false"></label></div><span id="snapFeedback" role="status"></span><span class="precisionKeys">Hold left mouse & drag to length · R axis · E inventory</span></div><div id="resumeHint">WASD to move · Mouse to look<br><small>Wheel: position · C: adjust · Esc: cancel</small></div>
 <div id="modal"><div class="modalbox" id="modalInner"></div></div>
 <script>
 'use strict';
@@ -206,7 +214,7 @@ const MATERIALS=[
  item('Tools','Chalk line','chalk','#69ddf0',{description:'Snap a permanent, non-solid construction reference line to two points. Place boards along either side or at a custom offset.'}),
  item('Tools','Tape measure','measure',C.select,{description:'Click a point to start measuring, then hover or click another point to see the exact 3D distance and offsets.'})
 ];
-const defaults={grip:'Start',alignment:'Center',faceOffset:0,gripOffset:12,allowOverlap:false,snapping:true,snap:.0625,snapEnds:true,snapMids:true,layoutSnap:true,layoutSpacing:16,layoutOffset:0,size:'2x6',len:92.625,axis:1,directionSign:1,flip:0,repeat:1,oc:16,width:1.5,depth:5.5,fit:0,force:0,
+const defaults={grip:'Start',alignment:'Center',faceOffset:0,gripOffset:12,allowOverlap:false,snapping:true,snap:.0625,snapEnds:true,snapMids:true,layoutSnap:true,layoutSpacing:16,layoutOffset:0,moveStep:'material',moveCustom:1,moveAxis:-1,placeOffset:[0,0,0],size:'2x6',len:92.625,axis:1,directionSign:1,flip:0,repeat:1,oc:16,width:1.5,depth:5.5,fit:0,force:0,
  stud:'2x6',studOC:16,wallHeight:97.125,topPlates:2,header:'2x10',
  joist:'2x10',joistOC:16,sill:'2x6',gasket:1,subfloor:1,blocking:1,
  fThick:8,fDepth:48,fTop:8,fFootW:24,fFootD:10,fSlab:0,
@@ -346,17 +354,34 @@ function collides(box,skipId=null){const e=aabb(box);return world.pieces.some(b=
  if(![0,1,2].every(i=>Math.abs(box.c[i]-b.c[i])<e[i]+eb[i]-.08))return false;
  return obbOverlap(box,b)
 })}
-function primitiveDims(it,axisOverride=null){const n=it.kind==='lumber'?sizes[settings.size]:[settings.width,settings.depth],s=[0,0,0],axis=axisOverride??settings.axis,other=[0,1,2].filter(k=>k!==axis);s[axis]=settings.len;s[other[0]]=settings.flip?n[1]:n[0];s[other[1]]=settings.flip?n[0]:n[1];return s}
+function primitiveDims(it,axisOverride=null){
+ const n=it.kind==='lumber'?sizes[settings.size]:[settings.width,settings.depth],s=[0,0,0],axis=axisOverride??settings.axis;s[axis]=settings.len;
+ if(axis===1){s[0]=settings.flip?n[1]:n[0];s[2]=settings.flip?n[0]:n[1]}
+ else{const depthUp=it.axis===0?!!settings.flip:!settings.flip;s[1]=depthUp?n[1]:n[0];s[axis===0?2:0]=depthUp?n[0]:n[1]}
+ return s;
+}
 function laidOnFoundation(it,h){return h?.box&&h.normal[1]>.8&&/foundation wall|sill gasket|sill plate|strip footing/i.test(h.box.n||'')&&/sill|gasket|plate/i.test(it.name)}
 function chosenAxis(it,h){return settings.axis}
+const looseFoundationSides=new WeakMap();
 function referenceSide(h,across){
  const b=h?.box;if(!b)return 1;
  if(h.guide){const d=vSub(h.guide.b,h.guide.a);return across===0?(d[2]>0?-1:1):(d[0]>=0?1:-1)}
  const g=b.g&&world.groups[b.g];
  if(g?.kind==='foundation'){
   const ps=g.points||[[g.a[0],g.a[1]],[g.b[0],g.a[1]],[g.b[0],g.b[1]],[g.a[0],g.b[1]]];
-  const mid=ps.reduce((v,p)=>v+p[across===0?0:1],0)/ps.length;
-  if(Math.abs(b.c[across]-mid)>.25)return Math.sign(b.c[across]-mid);
+  const area=ps.reduce((sum,p,i)=>{const q=ps[(i+1)%ps.length];return sum+p[0]*q[1]-q[0]*p[1]},0);let best=Infinity,outside=null;
+  for(let i=0;i<ps.length;i++){
+   const a=ps[i],q=ps[(i+1)%ps.length],dx=q[0]-a[0],dz=q[1]-a[1],length=Math.hypot(dx,dz);if(length<EPS)continue;
+   const outward=area>=0?[dz/length,-dx/length]:[-dz/length,dx/length],component=outward[across===0?0:1];if(Math.abs(component)<.5)continue;
+   const t=clamp(((b.c[0]-a[0])*dx+(b.c[2]-a[1])*dz)/(length*length),0,1),distance=Math.hypot(b.c[0]-a[0]-t*dx,b.c[2]-a[1]-t*dz);
+   if(distance<best){best=distance;outside=Math.sign(component)}
+  }
+  if(outside!==null)return outside;
+ }
+ if(concreteReference(b)){
+  const cached=looseFoundationSides.get(b)||{};
+  if(!cached[across]){const normal=h.referenceNormal||h.normal;cached[across]=Math.sign(normal[across])||Math.sign(h.point[across]-b.c[across])||Math.sign(eye[across]-b.c[across])||1;looseFoundationSides.set(b,cached)}
+  return cached[across];
  }
  if(Math.abs(h.normal[across])>.5)return Math.sign(h.normal[across]);
  return Math.sign(eye[across]-b.c[across])||1;
@@ -374,6 +399,89 @@ function alignmentCoord(h,cross,size){
  if(settings.alignment==='Inside')return b.c[cross]-side*delta;
  if(settings.alignment==='Custom')return b.c[cross]+side*settings.faceOffset;
  return b.c[cross];
+}
+function placementReference(h,it=current()){
+ if(it?.col===C.concrete&&['primitive','panel'].includes(it.kind))return h;
+ if(!h?.box||h.guide||!concreteReference(h.box)||!isSnapping()||h.normal[1]>.8)return h;
+ const top=h.box.c[1]+aabb(h.box)[1];
+ if(Math.abs(h.point[1]-top)>snapRadiusAt(h.point))return h;
+ const point=[...h.point];point[1]=top;return{...h,point,normal:[0,1,0],axis:1,sg:1,referenceNormal:h.referenceNormal||h.normal,foundationCap:true};
+}
+function seatOnFoundation(b,h){
+ if(!h?.box||!concreteReference(h.box)||h.normal[1]<.8)return b;
+ const ext=aabb(h.box),run=ext[0]>=ext[2]?0:2,cross=run===0?2:0,axis=b.placementAxis??settings.axis,side=referenceSide(h,cross);
+ if(axis===cross){
+  const at=h.box.c[cross]+side*(settings.alignment==='Outside'?ext[cross]:settings.alignment==='Inside'?-ext[cross]:settings.alignment==='Custom'?settings.faceOffset:0);
+  b.c[cross]=at+(b.startSign||1)*(b.s[axis]/2-memberGripOffset(b.grip,b.s[axis]));b.startPoint=at;
+ }else b.c[cross]=alignmentCoord(h,cross,b.s[cross]);
+ b.seatReference={run,cross,side};return b;
+}
+function moveBody(){
+ if(selected?.id)return world.pieces.find(p=>p.id===selected.id);
+ if(selected?.g)return world.pieces.find(p=>p.g===selected.g);
+ if(preview?.boxes?.[0]&&['lumber','primitive','panel'].includes(current().kind))return preview.boxes[0];
+ const axis=settings.axis,s=current().kind==='panel'?[settings.width,settings.depth,settings.len]:primitiveDims(current(),axis);
+ return{c:[0,0,0],s,placementAxis:current().kind==='panel'?2:axis};
+}
+function materialThickness(b){const run=b.placementAxis??memberEnds(b).axis;return Math.min(...b.s.filter((_,i)=>i!==run))}
+function moveSpec(b,h=null){
+ if(settings.moveAxis>=0)return{axis:settings.moveAxis,vector:[0,1,2].map(i=>i===settings.moveAxis?1:0)};
+ const ref=b.seatReference||h?.box&&concreteReference(h.box)&&{run:aabb(h.box)[0]>=aabb(h.box)[2]?0:2};
+ if(ref)return{axis:ref.run,vector:[0,1,2].map(i=>i===ref.run?1:0)};
+ const run=b.placementAxis??memberEnds(b).axis,axis=run===0?2:run===2?0:b.s[0]<=b.s[2]?0:2;
+ return{axis,vector:axesRotation(b).map(row=>row[axis])};
+}
+function moveAmount(b,fine=false){
+ if(fine||settings.moveStep==='fine')return Math.min(settings.snap,.125);
+ if(settings.moveStep==='custom')return settings.moveCustom;
+ if(settings.moveStep==='16'||settings.moveStep==='24')return Number(settings.moveStep);
+ return materialThickness(b);
+}
+function preciseInches(v){return Math.abs(v*16-Math.round(v*16))<EPS?fmt(v):Number(v.toFixed(4))+'″'}
+function applyPlacementShift(b){
+ const delta=settings.placeOffset||[0,0,0];if(!delta.some(v=>Math.abs(v)>EPS))return b;
+ b.c=vAdd(b.c,delta);if(b.gripAnchor)b.gripAnchor=vAdd(b.gripAnchor,delta);if(b.guideOrigin)b.guideOrigin=vAdd(b.guideOrigin,delta);
+ if(Number.isFinite(b.startPoint))b.startPoint+=delta[b.placementAxis??settings.axis];return b;
+}
+function nudgePosition(direction,fine=false){
+ const body=gesture?.editGroup?moveBody():gesture?.base||moveBody();if(!body||!selected&&!['lumber','primitive','panel'].includes(current().kind))return;
+ const spec=moveSpec(body,gesture?.hit||preview?.referenceHit||hover),amount=moveAmount(body,fine);if(!Number.isFinite(amount)||amount<=0)return;
+ let distance=direction*amount;
+ const reference=gesture?.hit||preview?.referenceHit||hover;
+ if(!selected&&!fine&&['16','24'].includes(settings.moveStep)&&body.connectionInfo?.label.startsWith('Beside face')&&reference?.box){
+  const fromCenter=dot(vSub(body.c,reference.box.c),spec.vector),station=direction>0?Math.floor(fromCenter/amount+EPS)+1:Math.ceil(fromCenter/amount-EPS)-1;
+  distance=station*amount-fromCenter;
+ }
+ const delta=vMul(spec.vector,distance);
+ if(gesture?.editId){
+  const g=gesture;g.base.c=vAdd(g.base.c,delta);
+  if(g.type==='length'){g.point=vAdd(g.point,delta);g.anchor=g.point[g.axis];initializeLengthAim(g,g.amount)}
+  else if(g.editGroup){g.editOffset=vAdd(g.editOffset||[0,0,0],delta)}
+  sceneDirty=geometryDirty=mouse.dirty=true;return;
+ }
+ if(selected?.g){
+  const g=startGroupMove(selected.g,{point:body.c,normal:[0,1,0]});g.moved=6;
+  const boxes=g.bases.map(p=>({...p,c:vAdd(p.c,delta)}));preview={boxes,translation:delta,valid:editBoxesValid(boxes,g)};finishEdit(g);return;
+ }
+ if(selected?.id){
+  const probe=copy(body);probe.c=vAdd(probe.c,delta);preview={boxes:[probe],valid:validMembers([probe],body.id)};finishEdit({type:'move',editId:body.id,moved:6});return;
+ }
+ settings.placeOffset=vAdd(settings.placeOffset||[0,0,0],delta);refreshLengthDrag({align:true});saveLocal();renderInspector();sceneDirty=mouse.dirty=true;
+}
+function findFoundationSupport(b){
+ const E=aabb(b),bottom=b.c[1]-E[1];let chosen=null,best=Infinity;
+ for(const p of world.pieces){if(p.id===b.id||!concreteReference(p))continue;const ext=aabb(p),distance=Math.abs(bottom-p.c[1]-ext[1]);
+  if(distance>.25||![0,2].every(i=>Math.abs(b.c[i]-p.c[i])<=E[i]+ext[i]+EPS))continue;
+  if(distance<best){best=distance;chosen=p}
+ }return chosen;
+}
+function setSeating(mode){
+ if(!['Outside','Center','Inside','Custom'].includes(mode))return;settings.alignment=mode;
+ const b=selected?.id&&world.pieces.find(p=>p.id===selected.id),support=b&&findFoundationSupport(b);
+ if(b&&support){const h={box:support,point:[b.c[0],support.c[1]+aabb(support)[1],b.c[2]],normal:[0,1,0]},next=seatOnFoundation(copy(b),h);
+  preview={boxes:[next],valid:validMembers([next],b.id)};finishEdit({type:'move',editId:b.id,moved:6});
+ }else refreshLengthDrag({align:true});
+ saveLocal();renderInspector();sceneDirty=mouse.dirty=true;
 }
 function guidePlacement(it,h){
  const guide=h.guide,a=guide.a,b=guide.b,d=vSub(b,a),mag=Math.hypot(d[0],d[2]);if(mag<1)return null;
@@ -401,6 +509,7 @@ function guidePlacement(it,h){
 }
 function placePrimitive(it,h){
  if(!h)return null;
+ h=placementReference(h,it);
  if(h.guide)return guidePlacement(it,h);
  const ax=chosenAxis(it,h),s=primitiveDims(it,ax),p=h.point,n=h.normal,c=[0,0,0],target=h.box;
  const support=laidOnFoundation(it,h)||!!h.guide&&ax!==1;
@@ -435,33 +544,57 @@ function placePrimitive(it,h){
   c[tangent]=2*E[tangent]<=s[tangent]+EPS?target.c[tangent]:alignmentCoord(h,tangent,s[tangent]);
  }
  if(h.guide){c[1]=h.guide.a[1]+s[1]/2; if(ax!==1)c[across]=alignmentCoord(h,across,s[across])}
- return inferConnection({c,s,n:it.name,col:it.col,layer:it.layer||it.cat,placementAxis:ax,startPoint:at,startSign:sign,edgeLabel:edgeLabel?(edgeLabel+' of '+target.n):target?.n,grip,gripPoint:[...p]},h);
+ return inferConnection(seatOnFoundation({c,s,n:it.name,col:it.col,layer:it.layer||it.cat,materialKind:it.kind,placementAxis:ax,startPoint:at,startSign:sign,edgeLabel:edgeLabel?(edgeLabel+' of '+target.n):target?.n,grip,gripPoint:[...p]},h),h);
 }
 function concreteReference(b){return b&&(/concrete|foundation|footing/i.test(b.n||'')||b.g&&world.groups[b.g]?.kind==='foundation')}
+function panelPiece(b){return b?.materialKind==='panel'||/sheathing|subfloor|slab panel/i.test(b?.n||'')||(b&&Math.min(...b.s)<1&&b.s.filter(v=>v>=24).length>=2)}
 function inferConnection(b,h){
- if(!isSnapping()||!h||h.guide||b.r?.some(v=>Math.abs(v)>EPS))return b;
- const axis=b.placementAxis??settings.axis,sign=b.startSign||1,off=memberGripOffset(b.grip,b.s[axis]),E=aabb(b),radius=snapRadiusAt(h.point);
+ if(!isSnapping()||!h||h.guide)return b;
+ const axis=b.placementAxis??settings.axis,sign=b.startSign||1,off=memberGripOffset(b.grip,b.s[axis]),E=aabb(b),radius=snapRadiusAt(h.point),source=h.box;
+ const parallel=p=>(p.placementAxis??[0,1,2].reduce((m,i)=>p.s[i]>p.s[m]?i:m,0))===axis;
  const finish=(probe,target,label)=>{
-  probe.startPoint=probe.c[axis]-sign*(probe.s[axis]/2-off);
-  probe.edgeLabel=label+' · '+target.n;probe.connectionInfo={kind:'face',label:probe.edgeLabel,key:'join:'+target.id};return probe;
+  const T=probe.lengthVector||[0,1,2].map(i=>i===axis?1:0),anchor=vAdd(probe.c,vMul(T,(probe.startSign||1)*(off-probe.s[axis]/2)));
+  probe.startPoint=anchor[axis];probe.gripAnchor=anchor;
+  probe.edgeLabel=label+' · '+target.n;probe.connectionInfo={kind:'face',label:probe.edgeLabel,key:'join:'+target.id};
+  if(target.seatReference)probe.seatReference={...target.seatReference};return probe;
  };
- const source=h.box,parallel=p=>(p.placementAxis??[0,1,2].reduce((m,i)=>p.s[i]>p.s[m]?i:m,0))===axis&&!p.r?.some(v=>Math.abs(v)>EPS);
- if(source&&!concreteReference(source)&&parallel(source)&&h.normal[1]>.8&&b.grip==='Start'){
-  const ext=aabb(source),edges=[];
-  for(let cross=0;cross<3;cross++)if(cross!==axis&&cross!==1){
-   for(const side of [-1,1]){const edge=source.c[cross]+side*ext[cross],distance=Math.abs(h.point[cross]-edge),limit=Math.min(radius,Math.max(.25,Math.min(ext[cross],E[cross])*.5));
-    if(distance<=limit)edges.push({cross,side,distance});
+ const pair=source&&b.materialKind==='panel'&&panelPiece(source);
+ if(source&&(!concreteReference(source)||b.col===C.concrete)&&(parallel(source)||pair)){
+  const R=axesRotation(source),toLocal=v=>[0,1,2].map(i=>R.reduce((sum,row,j)=>sum+row[i]*v[j],0));
+  const p=toLocal(vSub(h.point,source.c)),n=toLocal(h.normal),face=[0,1,2].reduce((m,i)=>Math.abs(n[i])>Math.abs(n[m])?i:m,0),half=source.s.map(v=>v/2);
+  const others=[0,1,2].filter(i=>i!==axis),up=pair?[0,1,2].reduce((m,i)=>source.s[i]<source.s[m]?i:m,0):others.reduce((m,i)=>Math.abs(R[1][i])>Math.abs(R[1][m])?i:m,others[0]);
+  const upSign=Math.sign(R[1][up])||1,verticalRun=Math.abs(R[1][axis])>.8,edges=[];
+  if(pair&&face!==up||!pair&&face!==axis&&(verticalRun||face!==up)){edges.push({cross:face,side:Math.sign(n[face])||1,distance:0})}
+  else if(pair&&face===up||!pair&&(face===up&&n[face]*upSign>.5||face===axis&&Math.abs(h.normal[1])>.8)){
+   for(let cross=0;cross<3;cross++)if(cross!==axis&&(verticalRun||cross!==up)||pair&&cross!==up){
+    const tolerance=Math.min(radius,half[cross]<=1.5?half[cross]:Math.max(.25,Math.min(half[cross],b.s[cross]/2)*.5));
+    for(const side of [-1,1]){const distance=Math.abs(p[cross]-side*half[cross]);if(distance<=tolerance+EPS)edges.push({cross,side,distance})}
    }
   }
-  for(const edge of edges.sort((a,b)=>a.distance-b.distance)){
-   const probe=copy(b);probe.c[edge.cross]=source.c[edge.cross]+edge.side*(ext[edge.cross]+E[edge.cross]);
-   probe.c[1]=source.c[1]-ext[1]+E[1];
-   probe.c[axis]=source.c[axis]-sign*ext[axis]+sign*b.s[axis]/2;
+  const edge=edges.sort((a,b)=>a.distance-b.distance||b.side-a.side)[0];
+  if(edge){
+   const local=[0,0,0],probe=copy(b);probe.r=[...(source.r||[0,0,0])];
+   local[edge.cross]=edge.side*(half[edge.cross]+b.s[edge.cross]/2);
+   if(pair){
+    const other=[0,1,2].find(i=>i!==up&&i!==edge.cross);local[other]=-half[other]+b.s[other]/2;
+    const planeSign=Math.sign(p[up])||1;local[up]=planeSign*(b.s[up]/2-half[up]);
+   }else{
+    local[axis]=-sign*half[axis]+sign*b.s[axis]/2;
+    const other=[0,1,2].find(i=>i!==axis&&i!==edge.cross);
+    local[other]=other===up&&!verticalRun?upSign*(b.s[other]/2-half[other]):0;
+   }
+   probe.c=transformPoint(source,local);probe.lengthVector=R.map(row=>row[axis]);probe.repeatVector=R.map(row=>row[edge.cross]);
    return finish(probe,source,'Beside face');
   }
+  if(!pair&&face===axis){
+   const side=Math.sign(n[axis])||1,local=[0,0,0],probe=copy(b);probe.r=[...(source.r||[0,0,0])];
+   local[axis]=side*(half[axis]+b.s[axis]/2);probe.c=transformPoint(source,local);probe.lengthVector=R.map(row=>row[axis]);
+   return finish(probe,source,'Butt joint');
+  }
  }
+ if(b.r?.some(v=>Math.abs(v)>EPS))return b;
  let best=radius,chosen=null;
- for(const p of world.pieces){if(!isVisible(p)||p===source||p.id===source?.id||concreteReference(p)||!parallel(p))continue;
+ for(const p of world.pieces){if(!isVisible(p)||p===source||p.id===source?.id||concreteReference(p)||!parallel(p)||p.r?.some(v=>Math.abs(v)>EPS))continue;
   const ext=aabb(p);if(![0,1,2].filter(i=>i!==axis).every(i=>Math.abs(p.c[i]-b.c[i])<ext[i]+E[i]-.01))continue;
   for(const edge of [p.c[axis]-ext[axis],p.c[axis]+ext[axis]]){
    const distance=Math.abs(edge-h.point[axis]);if(distance>best)continue;
@@ -473,14 +606,15 @@ function inferConnection(b,h){
 }
 function placePanel(it,h){
  if(!h)return null;
+ h=placementReference(h,it);
  if(h.guide)return guidePlacement(it,h);
  const target=h.box;
- if(target?.r?.some(v=>Math.abs(v)>EPS)){
+ if(target&&(target.r?.some(v=>Math.abs(v)>EPS)||panelPiece(target))){
   // A rotated support defines the sheet's local frame. Keep its Euler rotation
   // unchanged and swap local dimensions for Flip; no Euler composition is needed.
   const R=axesRotation(target),toLocal=v=>[0,1,2].map(i=>R.reduce((sum,row,j)=>sum+row[i]*v[j],0));
   const p=toLocal(vSub(h.point,target.c)),normal=toLocal(h.normal),localEye=toLocal(vSub(eye,target.c));
-  const face=[0,1,2].reduce((m,i)=>Math.abs(normal[i])>Math.abs(normal[m])?i:m,0),other=[0,1,2].filter(i=>i!==face);
+  const face=panelPiece(target)?[0,1,2].reduce((m,i)=>target.s[i]<target.s[m]?i:m,0):[0,1,2].reduce((m,i)=>Math.abs(normal[i])>Math.abs(normal[m])?i:m,0),other=[0,1,2].filter(i=>i!==face);
   const s=[0,0,0];s[face]=settings.depth;s[other[0]]=settings.flip?settings.len:settings.width;s[other[1]]=settings.flip?settings.width:settings.len;
   const run=settings.flip?other[0]:other[1],across=other.find(i=>i!==run),E=target.s.map(v=>v/2),radius=snapRadiusAt(h.point);
   const anchorCoord=axis=>{
@@ -496,13 +630,13 @@ function placePanel(it,h){
    const side=Math.abs(normal[across])>.5?Math.sign(normal[across]):Math.sign(localEye[across])||1,delta=E[across]-s[across]/2;
    c[across]=settings.alignment==='Outside'?side*delta:settings.alignment==='Inside'?-side*delta:settings.alignment==='Custom'?side*settings.faceOffset:0;
   }else c[across]=anchorCoord(across);
-  const faceSign=normal[face]<0?-1:1;
+  const faceSign=Math.abs(normal[face])>.5?Math.sign(normal[face]):Math.sign(p[face])||Math.sign(localEye[face])||1;
   c[face]=faceSign*(E[face]+s[face]/2);
   const lengthVector=R.map(row=>row[run]),repeatVector=R.map(row=>row[across]),surfaceNormal=R.map(row=>row[face]*faceSign);
   const gripLocal=[...c];gripLocal[run]=at;
-  return{c:transformPoint(target,c),s,r:[...target.r],n:it.name,col:it.col,layer:it.layer||it.cat,
+  return inferConnection({c:transformPoint(target,c),s,r:[...(target.r||[0,0,0])],n:it.name,col:it.col,layer:it.layer||it.cat,materialKind:'panel',
    placementAxis:run,startSign:sign,grip,edgeLabel:target.n,
-   lengthVector,gripAnchor:transformPoint(target,gripLocal),repeatVector,surfaceNormal};
+   lengthVector,gripAnchor:transformPoint(target,gripLocal),repeatVector,surfaceNormal},h);
  }
  // Preserve world-grid behavior on axis-aligned supports and on the ground.
  const face=[0,1,2].reduce((m,i)=>Math.abs(h.normal[i])>Math.abs(h.normal[m])?i:m,0),other=[0,1,2].filter(i=>i!==face);
@@ -515,7 +649,7 @@ function placePanel(it,h){
  c[across]=target&&(h.guide||E[run]>=E[across]*1.5)?alignmentCoord(h,across,s[across]):axisAnchor(h,across);
  if(target)c[face]=target.c[face]+h.normal[face]*(E[face]+s[face]/2);
  else c[face]=h.point[face]+h.normal[face]*s[face]/2;
- return inferConnection({c,s,n:it.name,col:it.col,layer:it.layer||it.cat,placementAxis:run,startPoint:at,startSign:sign,grip,edgeLabel:target?.n},h);
+ return inferConnection(seatOnFoundation({c,s,n:it.name,col:it.col,layer:it.layer||it.cat,materialKind:'panel',placementAxis:run,startPoint:at,startSign:sign,grip,edgeLabel:target?.n},h),h);
 }
 function repeatMembers(b,axis=b.placementAxis??settings.axis){
  const parts=[b],count=current().kind==='panel'?1:clamp(settings.repeat|0,1,64);
@@ -527,7 +661,8 @@ function validMembers(parts,skipId=null){
  return parts.every((b,i)=>b.c.every(Number.isFinite)&&b.s.every(v=>Number.isFinite(v)&&v>.05)&&
   (settings.allowOverlap||(!collides(b,skipId)&&!parts.slice(0,i).some(p=>obbOverlap(b,p)))));
 }
-function placementMarkers(anchor,target){return [anchor,target].map((c,i)=>({c:[...c],s:[2.2,2.2,2.2],n:i?'Board endpoint':'Fixed grip',col:'#56eff6',layer:'Guide'}))}
+function placementMarkers(){return []}
+function previewVisualState(){return{selectionFill:0,inspectFill:0,materialFill:.08,blockedFill:.12}}
 function memberPreview(b){
  const ax=b.placementAxis??settings.axis,T=b.lengthVector||b.guideVector||[0,1,2].map(i=>i===ax?1:0),sign=b.startSign||1;
  const off=memberGripOffset(b.grip||settings.grip,b.s[ax]),anchor=vAdd(b.c,vMul(T,sign*(off-b.s[ax]/2)));
@@ -536,8 +671,9 @@ function memberPreview(b){
   text:current().name+'  '+fmt(b.s[ax])+'  · '+settings.grip+' / '+settings.alignment+(b.edgeLabel?'  · '+b.edgeLabel:'')+(!valid?' · blocked':'')};
 }
 function buildGhost(h){
+ h=placementReference(h);
  if(!h)return null;const b=current().kind==='panel'?placePanel(current(),h):placePrimitive(current(),h);if(!b)return null;
- const result=memberPreview(b),snaps=Object.values(h.snapHits||{});
+ applyPlacementShift(b);const result=memberPreview(b),snaps=Object.values(h.snapHits||{});
  result.snapInfo=b.connectionInfo||snaps.find(m=>m.kind==='layout')||snaps.find(m=>m.kind==='mid')||snaps[0]||null;
  result.referenceHit=h;return result;
 }
@@ -677,13 +813,13 @@ function eraseTarget(){
  selected=null;targetCycle=0;commit();
 }
 function cancelTool(){recipe=null;gesture=null;tapeStart=tapeResult=null;selected=null;geometryDirty=true;
- equipped=0;hotbar[activeSlot]=0;renderCatalog();renderInspector();sceneDirty=true;toast('Hand / inspect · item exited');}
+ equipped=0;renderCatalog();renderInspector();sceneDirty=true;toast('Select / move · E for materials');}
 function cycleTarget(){targetCycle++;const h=cast();toast(h?.box?'Target: '+h.box.n+' ('+(targetCycle+1)+')':'Ground');sceneDirty=true;}
-function equip(idx){targetCycle=0;equipped=idx;hotbar[activeSlot]=idx;selected=null;recipe=null;gesture=null;geometryDirty=true;tapeStart=tapeResult=null;const it=current();if(it.kind==='lumber'){settings.size=it.size;settings.len=it.L;settings.axis=it.axis;settings.flip=it.flip||0}else if(it.kind==='primitive'){settings.width=it.w;settings.depth=it.d;settings.len=it.L;settings.axis=it.axis;settings.flip=0}else if(it.kind==='panel'){settings.width=it.w;settings.len=it.L;settings.depth=it.thick;settings.flip=0}settings.repeat=1;renderCatalog();renderInspector();sceneDirty=true}
+function equip(idx){targetCycle=0;equipped=idx;hotbar[activeSlot]=idx;selected=null;recipe=null;gesture=null;settings.placeOffset=[0,0,0];geometryDirty=true;tapeStart=tapeResult=null;const it=current();if(it.kind==='lumber'){settings.size=it.size;settings.len=it.L;settings.axis=it.axis;settings.flip=it.flip||0}else if(it.kind==='primitive'){settings.width=it.w;settings.depth=it.d;settings.len=it.L;settings.axis=it.axis;settings.flip=0}else if(it.kind==='panel'){settings.width=it.w;settings.len=it.L;settings.depth=it.thick;settings.flip=0}settings.repeat=1;renderCatalog();renderInspector();sceneDirty=true}
 function renderCatalog(){const cats=['Recipes','All','Foundation','Floor','Walls','Roof','General','Tools'];$('#categories').innerHTML=cats.map(c=>`<button class="chip ${catFilter===c?'active':''}" data-cat="${c}">${c}</button>`).join('');
  const mats=MATERIALS.map((x,i)=>({...x,i})).filter(x=>(catFilter==='All'||(catFilter==='Recipes'?['frect','fpoly','floor','wall','roof','door','window'].includes(x.kind):catFilter===x.cat))&&(!search||(x.name+' '+x.cat).toLowerCase().includes(search.toLowerCase()))).sort((a,b)=>cats.indexOf(a.cat)-cats.indexOf(b.cat));let html='',last='';for(const it of mats){if(catFilter==='All'&&last!==it.cat){html+=`<div class="catLabel">${it.cat}</div>`;last=it.cat}html+=`<button class="material ${equipped===it.i?'active':''}" draggable="true" data-index="${it.i}" title="Select or drag onto scene"><span class="matthumb" style="background:${it.col}">${it.kind==='inspect'?'↖':it.kind==='remove'?'×':it.kind==='roof'?'⌃':it.kind==='wall'?'▥':it.kind==='floor'?'≡':it.kind==='panel'?'▣':'▰'}</span><span><span class="matName">${esc(it.name)}</span><span class="matSub">${it.kind==='primitive'||it.kind==='lumber'?'Drag to stretch':'Click to use'} · ${it.cat}</span></span></button>`}$('#materialList').innerHTML=html||'<p class="muted">No matching materials.</p>';renderHotbar()}
 const hotbar=[0,2,8,15,18,26,33,1];let activeSlot=0;
-function renderHotbar(){$('#hotbar').innerHTML=hotbar.map((idx,i)=>`<button class="slot ${activeSlot===i?'on':''}" data-slot="${i}"><small>${i+1}</small>${esc(MATERIALS[idx].name.replace('Foundation rectangle','Foundation').replace('Framed wall','Wall').replace('Gable roof frame','Roof').replace('Inspect / edit','Inspect').replace('Standard stud','Stud').replace('Floor platform','Floor').replace('Pressure-treated sill','Sill plate').replace('Remove piece','Remove').replace('Rim / band joist','Rim joist'))}</button>`).join('');syncQuick()}
+function renderHotbar(){$('#hotbar').innerHTML=hotbar.map((idx,i)=>`<button class="slot ${activeSlot===i&&equipped===idx?'on':''}" data-slot="${i}"><small>${i+1}</small>${esc(MATERIALS[idx].name.replace('Foundation rectangle','Foundation').replace('Framed wall','Wall').replace('Gable roof frame','Roof').replace('Inspect / edit','Inspect').replace('Standard stud','Stud').replace('Floor platform','Floor').replace('Pressure-treated sill','Sill plate').replace('Remove piece','Remove').replace('Rim / band joist','Rim joist'))}</button>`).join('');syncQuick()}
 const fields={grip:['Grab point','choice',['Start','Center','End','Offset']],alignment:['Reference alignment','choice',['Outside','Center','Inside','Custom']],faceOffset:['Custom offset (+ toward outside)','length'],gripOffset:['Offset from start','length'],allowOverlap:['Allow intersections / overlaps','bool'],snapping:['Enable snapping','bool'],snapEnds:['Snap to ends','bool'],snapMids:['Snap to midpoints','bool'],layoutSnap:['Snap to layout marks','bool'],layoutSpacing:['Layout spacing from reference start','length'],layoutOffset:['First layout mark offset','length'],snap:['Snap increment','choice',[.0625,.125,.25,.5,.75,1.5,3,6,12,16,24]],len:['Length','length'],axis:['Run direction','choice',[0,1,2],['X – horizontal','Y – vertical','Z – horizontal']],flip:['Rotate cross-section','choice',[0,1],['Flat / default','Turned 90°']],size:['Lumber section','choice',Object.keys(sizes)],width:['Width / face','length'],depth:['Thickness / depth','length'],repeat:['Quantity','choice',[1,2,3,4,5,6,8,10,12,16,20]],oc:['Repeat offset','length'],
  stud:['Stud size','choice',['2x4','2x6','2x8']],studOC:['Studs O.C.','choice',[12,16,19.2,24]],wallHeight:['Wall height','length'],topPlates:['Top plate layers','choice',[1,2,3]],header:['Header section','choice',['2x6','2x8','2x10','2x12']],
  joist:['Joist section','choice',['2x6','2x8','2x10','2x12']],joistOC:['Joists O.C.','choice',[12,16,19.2,24]],sill:['Sill section','choice',['2x4','2x6','2x8']],gasket:['Sill gasket','bool'],subfloor:['¾″ subfloor panels','bool'],blocking:['Midspan blocking','bool'],
@@ -696,27 +832,61 @@ function fieldHTML(key,value,target='settings',label=null){const def=fields[key]
  if(type==='choice'){const opts=def[2],labels=def[3]||opts;return`<div class="field"><label>${esc(nm)}</label><select ${common}>${opts.map((v,i)=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(labels[i])}</option>`).join('')}</select></div>`}
  return`<div class="field"><label>${esc(nm)} <span class="unit">${Number.isFinite(+value)?fmt(+value):''}</span></label><input ${common} value="${esc(value)}" inputmode="decimal" aria-label="${esc(nm)}"><small>Inches; you can type 8' 1 1/8"</small></div>`}
 const recipeParamMap={wall:{stud:'stud',oc:'studOC',height:'wallHeight',tops:'topPlates',header:'header'},floor:{joist:'joist',oc:'joistOC',sill:'sill',gasket:'gasket',deck:'subfloor',blocking:'blocking'},roof:{ridge:'ridge',pitch:'pitch',rafter:'rafter',oc:'rafterOC',overhang:'overhang',ties:'ties',deck:'roofDeck'},foundation:{thickness:'fThick',depth:'fDepth',footW:'fFootW',footD:'fFootD',slab:'fSlab'}};
-function renderInspector(){let title,sub,typ,html='',g=selected?.g&&world.groups[selected.g],b=selected?.id&&world.pieces.find(v=>v.id===selected.id),it=current();if(selected&&!g&&!b)selected=null;
- if(g){typ='EDIT ASSEMBLY';title=g.kind[0].toUpperCase()+g.kind.slice(1)+' assembly';sub=(world.pieces.filter(b=>b.g===selected.g).length)+' generated components';html=`<p class="desc">Changes rebuild all pieces in this assembly. Add openings with the Door and Window tools.</p><div class="inlineButtons"><button class="btn tiny primary" data-action="duplicate">Duplicate</button><button class="btn tiny" data-action="hide">${hiddenGroups.has(selected.g)?'Show':'Hide'} group</button><button class="btn tiny warn" data-action="delete">Delete</button></div><div class="sectionTitle">Placement (inches)</div><div class="fgrid">`;
- if(g.a&&g.b){for(const [key,name] of [['ax','Start X'],['az','Start Z'],['bx','End X'],['bz','End Z']])html+=fieldHTML(key,key==='ax'?g.a[0]:key==='az'?g.a[1]:key==='bx'?g.b[0]:g.b[1],'group',name)}else html+='<p class="muted">Polygon outline coordinates are fixed. Edit height/width below.</p>';
- html+=fieldHTML('y',g.y,'group','Base elevation (Y)')+'</div><div class="sectionTitle">Assembly recipe</div>';
- const mapping=recipeParamMap[g.kind]||{};for(const [prop,setting] of Object.entries(mapping)){if(g.kind==='foundation'&&prop==='slab'&&g.points)continue;html+=fieldHTML(setting,g[prop],'group.'+prop)}
- if(g.kind==='wall'&&(g.openings||[]).length){html+='<div class="sectionTitle">Openings</div>';g.openings.forEach((o,i)=>{html+=`<div class="field"><label>${esc(o.type)} at ${fmt(o.x)} — ${fmt(o.width)} × ${fmt(o.height)}</label><button class="btn tiny warn" data-action="removeOpening" data-open="${i}">Remove opening</button></div>`})}}
- else if(b){typ='EDIT COMPONENT';title=b.n;sub=(b.layer||'General')+' · '+(b.r?'Angled':'Square cut');html=`<p class="desc">Edit any piece dimension or position. Custom changes apply immediately when you leave the field.</p><div class="inlineButtons"><button class="btn tiny primary" data-action="duplicate">Duplicate</button><button class="btn tiny warn" data-action="delete">Delete</button></div><div class="sectionTitle">Location · center (inches)</div><div class="fgrid">`;
- ['X','Y','Z'].forEach((n,i)=>html+=fieldHTML('c'+i,b.c[i],'piece','Center '+n));html+='</div><div class="sectionTitle">Actual dimensions</div><div class="fgrid">';['X','Y','Z'].forEach((n,i)=>html+=fieldHTML('s'+i,b.s[i],'piece','Size '+n));html+='</div><div class="sectionTitle">Angle (degrees)</div><div class="fgrid">';['X','Y','Z'].forEach((n,i)=>html+=fieldHTML('r'+i,+(b.r?.[i]||0)*180/Math.PI,'piece','Rotate '+n));html+='</div>'}
- else{typ='BUILD SETTINGS';title=it.name;sub=it.cat+' · '+(it.kind==='lumber'?'actual lumber dimensions':it.kind==='primitive'?'custom rectangular stock':'sandbox tool');html=`<p class="desc">${esc(it.description||'Choose the measurements you want, then click or drag in the 3D scene to place. Build it your way.')}</p>`;
- if(['lumber','primitive','panel'].includes(it.kind)){const entries=it.kind==='lumber'?['size','len','axis','flip','grip','alignment','faceOffset','gripOffset','allowOverlap','snapping','snap','repeat','oc']:it.kind==='primitive'?['width','depth','len','axis','flip','grip','alignment','faceOffset','gripOffset','allowOverlap','snapping','snap','repeat','oc']:['width','len','depth','flip','grip','gripOffset','alignment','faceOffset','allowOverlap','snapping','snap'];html+='<div class="sectionTitle">Held material</div>';for(const k of entries)html+=fieldHTML(k,settings[k]);if(it.kind==='lumber')html+='<p class="muted">Nominal lumber sizes are converted to actual cross-sectional dimensions automatically.</p>'}
- else if(recipeFields[it.kind]){html+='<div class="sectionTitle">Recipe options</div>';for(const k of recipeFields[it.kind])html+=fieldHTML(k,settings[k]);if(recipe?.kind==='fpoly')html+=`<button class="btn primary" data-action="closePolygon">Close outline (${recipe.pts.length} corners)</button>`;if(recipe?.start)html+='<button class="btn warn" data-action="cancelRecipe">Cancel current shape</button>'}
- else if(it.kind==='chalk')html+='<p class="muted">Click two points to draw a reusable chalk line. Choose Outside / Center / Inside (B) for material placement along it.</p>';
- else if(it.kind==='inspect')html+='<p class="muted">Tip: group frames rebuild from their settings. Individual loose pieces have editable X/Y/Z position, dimensions and angles.</p>';
- if(it.kind==='inspect'||it.kind==='remove')html+=`<div class="sectionTitle">World actions</div><div class="inlineButtons"><button class="btn tiny" data-action="takeoff">Material list</button><button class="btn tiny" data-action="clear">New build</button></div>`
+fields.moveAxis=['Move along','choice',[-1,0,1,2],['Automatic / across material','X','Y · up / down','Z']];
+function seatChoicesHTML(id=''){
+ return `<div ${id?'id="'+id+'"':''} class="seatChoices" role="group" aria-label="Position on support">${[['Outside','Outside'],['Center','Middle'],['Inside','Inside']].map(([value,label])=>`<button type="button" data-seat="${value}" aria-pressed="${settings.alignment===value}">${label}</button>`).join('')}</div>`;
+}
+function seatingHTML(){
+ const x=settings.alignment==='Outside'?10:settings.alignment==='Inside'?60:35;
+ return `<div class="seatSection"><label>Position on support <span class="tag">B</span></label>${seatChoicesHTML()}<svg class="seatDiagram" viewBox="0 0 160 38" aria-label="Material aligned to the selected support edge"><rect x="10" y="20" width="140" height="14" rx="2" fill="#748690"/><rect x="${x}" y="10" width="90" height="10" rx="1" fill="#dfc18a"/><line x1="${settings.alignment==='Outside'?10:settings.alignment==='Inside'?150:80}" y1="4" x2="${settings.alignment==='Outside'?10:settings.alignment==='Inside'?150:80}" y2="37" stroke="#c6eda2" stroke-dasharray="3 2"/></svg></div>`;
+}
+function moveControlsHTML(){
+ const b=moveBody(),step=moveAmount(b),custom=settings.moveStep==='custom';
+ return `<div class="moveControls"><label for="moveStep">Move by <span class="muted">wheel</span></label><select id="moveStep" aria-label="Move by"><option value="material" ${settings.moveStep==='material'?'selected':''}>Material thickness · ${preciseInches(materialThickness(b))}</option><option value="16" ${settings.moveStep==='16'?'selected':''}>16″ on center</option><option value="24" ${settings.moveStep==='24'?'selected':''}>24″ on center</option><option value="fine" ${settings.moveStep==='fine'?'selected':''}>Fine · ${preciseInches(Math.min(settings.snap,.125))}</option><option value="custom" ${custom?'selected':''}>Custom amount…</option></select><input id="moveCustom" aria-label="Custom move amount" spellcheck="false" value="${esc(preciseInches(settings.moveCustom))}" style="display:${custom?'block':'none'}"><div class="moveButtons"><button class="btn tiny" data-action="nudge" data-direction="-1">‹ Previous</button><button class="btn tiny" data-action="nudge" data-direction="1">Next ›</button></div><small>One notch: ${esc(preciseInches(step))} · Shift + wheel: fine</small>${!selected&&(settings.placeOffset||[]).some(v=>Math.abs(v)>EPS)?'<button class="btn tiny" data-action="resetOffset">Reset placement offset</button>':''}</div>`;
+}
+function renderInspector(){
+ const open=new Set($$('#fields details[open]').map(el=>el.dataset.section)),scroll=$('#fields').scrollTop;
+ const details=(section,label,body)=>`<details class="adjustDetails" data-section="${section}" ${open.has(section)?'open':''}><summary>${label}</summary>${body}</details>`;
+ let title,sub,typ,html='',advanced='';
+ const g=selected?.g&&world.groups[selected.g],b=selected?.id&&world.pieces.find(v=>v.id===selected.id),it=current(),stock=['lumber','primitive','panel'].includes(it.kind);
+ if(selected&&!g&&!b)selected=null;
+ if(g){
+  typ='EDIT ASSEMBLY';title=g.kind[0].toUpperCase()+g.kind.slice(1)+' assembly';sub=world.pieces.filter(p=>p.g===selected.g).length+' components';
+  html=moveControlsHTML();const mapping=recipeParamMap[g.kind]||{};html+='<div class="sectionTitle">Build dimensions</div>';
+  for(const [prop,setting] of Object.entries(mapping)){if(g.kind==='foundation'&&prop==='slab'&&g.points)continue;html+=fieldHTML(setting,g[prop],'group.'+prop)}
+  let coordinates='';if(g.a&&g.b)for(const [key,name] of [['ax','Start X'],['az','Start Z'],['bx','End X'],['bz','End Z']])coordinates+=fieldHTML(key,key==='ax'?g.a[0]:key==='az'?g.a[1]:key==='bx'?g.b[0]:g.b[1],'group',name);
+  coordinates+=fieldHTML('y',g.y,'group','Base elevation (Y)');html+=details('coordinates','Exact position',coordinates);
+  if(g.kind==='wall')for(const [i,o] of (g.openings||[]).entries())html+=`<div class="field"><label>${esc(o.type)} · ${fmt(o.width)} × ${fmt(o.height)}</label><button class="btn tiny warn" data-action="removeOpening" data-open="${i}">Remove opening</button></div>`;
+  html+='<div class="inlineButtons"><button class="btn tiny" data-action="duplicate">Duplicate</button><button class="btn tiny" data-action="hide">Hide / show</button><button class="btn tiny warn" data-action="delete">Delete</button></div>';
+ }else if(b){
+  typ='ADJUST PIECE';title=b.n;sub='Drag the body or an end in the scene';const axis=memberEnds(b).axis;
+  html=fieldHTML('s'+axis,b.s[axis],'piece','Length');if(findFoundationSupport(b))html+=seatingHTML();html+=moveControlsHTML();
+  let coordinates='<div class="sectionTitle">Position</div>';
+  for(let i=0;i<3;i++)coordinates+=fieldHTML('c'+i,b.c[i],'piece','Center '+'XYZ'[i]);
+  coordinates+='<div class="sectionTitle">Dimensions</div>';for(let i=0;i<3;i++)coordinates+=fieldHTML('s'+i,b.s[i],'piece','Size '+'XYZ'[i]);
+  coordinates+='<div class="sectionTitle">Rotation</div>';for(let i=0;i<3;i++)coordinates+=fieldHTML('r'+i,(b.r?.[i]||0)*180/Math.PI,'piece','Rotate '+'XYZ'[i]);
+  html+=details('coordinates','Exact position & rotation',coordinates)+'<div class="inlineButtons"><button class="btn tiny" data-action="duplicate">Duplicate</button><button class="btn tiny warn" data-action="delete">Delete</button></div>';
+ }else{
+  typ='PLACE MATERIAL';title=it.name;sub=stock?'Choose the fit, then draw in the scene':it.cat;
+  if(stock){
+   if(it.kind==='lumber')html+=fieldHTML('size',settings.size);
+   html+=fieldHTML('len',settings.len);html+=seatingHTML()+moveControlsHTML();
+   const entries=it.kind==='lumber'?['axis','flip','grip','gripOffset','alignment','faceOffset','repeat','oc']:it.kind==='primitive'?['width','depth','axis','flip','grip','gripOffset','alignment','faceOffset','repeat','oc']:['width','depth','flip','grip','gripOffset','alignment','faceOffset'];
+   for(const k of entries)advanced+=fieldHTML(k,settings[k]);
+  }else if(recipeFields[it.kind]){
+   for(const k of recipeFields[it.kind])html+=fieldHTML(k,settings[k]);
+   if(recipe?.kind==='fpoly')html+=`<button class="btn primary" data-action="closePolygon">Close outline (${recipe.pts.length} corners)</button>`;
+   if(recipe?.start)html+='<button class="btn warn" data-action="cancelRecipe">Cancel current shape</button>';
+  }else html+='<p class="desc">Choose a material with E, or click a piece to adjust it. Use the wheel to position a selected piece.</p>';
  }
- if(['lumber','primitive','panel','inspect'].includes(it.kind)){
-  html+='<div class="sectionTitle">Snap targets & layout</div>';
-  for(const k of ['snapEnds','snapMids','layoutSnap','layoutSpacing','layoutOffset'])html+=fieldHTML(k,settings[k]);
-  if(g||b||it.kind==='inspect')for(const k of ['snapping','snap'])html+=fieldHTML(k,settings[k]);
+ if(stock||b||g||it.kind==='inspect'){
+  advanced+='<div class="sectionTitle">Fine placement</div>';
+  for(const k of ['moveAxis','snapping','snap','snapEnds','snapMids','layoutSnap','layoutSpacing','layoutOffset','allowOverlap'])advanced+=fieldHTML(k,settings[k]);
+  if(!stock)advanced+=fieldHTML('faceOffset',settings.faceOffset);
+  html+=details('advanced','Advanced · precision & snapping',advanced);
  }
- $('#inspectorMode').textContent=typ;$('#panelTitle').textContent=title;$('#panelSub').textContent=sub;$('#fields').innerHTML=html;renderHotbar()}
+ $('#inspectorMode').textContent=typ;$('#panelTitle').textContent=title;$('#panelSub').textContent=sub;$('#fields').innerHTML=html;$('#fields').scrollTop=scroll;renderHotbar();
+}
 function syncQuick(){const it=current();if(!it)return;$('#quickName').textContent=it.name;
  const isLumber=it.kind==='lumber',isPrimitive=it.kind==='primitive',isPanel=it.kind==='panel',showLength=isLumber||isPrimitive||isPanel;
  $('#sizeWrap').style.display=isLumber?'flex':'none';$('#lengthWrap').style.display=showLength?'flex':'none';$('#quickAxis').style.display=isPanel||!showLength?'none':'inline-block';
@@ -758,6 +928,15 @@ $('#quickLength').onchange=e=>{const val=parseInches(e.target.value);if(!Number.
 $('#snapToggle').onclick=()=>setSnapping(settings.snapping===false);
 $('#precisionSettings').onclick=()=>showInspector(true);
 $('#runDirection').onclick=()=>turnMaterial(false);$('#alignmentToggle').onclick=()=>cycleAlignment();
+$('#moveReadout').onclick=()=>showInspector(true);
+document.addEventListener('click',e=>{const button=e.target.closest('[data-seat]');if(button)setSeating(button.dataset.seat)});
+$('#fields').addEventListener('change',e=>{
+ if(e.target.id==='moveStep'){settings.moveStep=e.target.value;saveLocal();renderInspector();sceneDirty=mouse.dirty=true}
+ if(e.target.id==='moveCustom'){
+  const amount=parseInches(e.target.value);if(!Number.isFinite(amount)||amount<=0||amount>4000){toast('Enter a positive move amount, such as 7 3/8″.');renderInspector();return}
+  settings.moveCustom=amount;saveLocal();renderInspector();sceneDirty=mouse.dirty=true;
+ }
+});
 $('#snapStep').onchange=e=>{settings.snap=Number(e.target.value);saveLocal();renderInspector();sceneDirty=mouse.dirty=true};
 for(const k of ['snapEnds','snapMids','layoutSnap'])$('#'+k).onclick=()=>{settings[k]=settings[k]===false;saveLocal();renderInspector();sceneDirty=mouse.dirty=true};
 for(const k of ['layoutSpacing','layoutOffset'])$('#'+k).onchange=e=>{
@@ -781,6 +960,8 @@ function changeField(el){const target=el.dataset.target,key=el.dataset.field;if(
  if(bad){world=history.pop();syncTitle();renderInspector();toast('Invalid assembly size. Keep walls ≥24″, footprints ≥48″, and spacing/heights positive.');return}
  rebuild(selected.g);commit();return}}
 function doAction(act,el){const g=selected?.g&&world.groups[selected.g],b=selected?.id&&world.pieces.find(b=>b.id===selected.id);
+ if(act==='nudge'){nudgePosition(Number(el.dataset.direction));return}
+ if(act==='resetOffset'){settings.placeOffset=[0,0,0];refreshLengthDrag({align:true});saveLocal();renderInspector();sceneDirty=mouse.dirty=true;return}
  if(act==='cancelRecipe'){recipe=null;renderInspector();return}if(act==='closePolygon'){closePolygon();return}if(act==='takeoff'){openTakeoff();return}if(act==='clear'){confirmNew();return}
  if(act==='delete'){checkpoint();if(g){world.pieces=world.pieces.filter(b=>b.g!==selected.g);delete world.groups[selected.g]}else if(b)world.pieces=world.pieces.filter(x=>x.id!==selected.id);selected=null;commit();toast('Deleted');return}
  if(act==='removeOpening'&&g){checkpoint();g.openings.splice(Number(el.dataset.open),1);rebuild(selected.g);commit();return}
@@ -848,8 +1029,9 @@ function drawSoftware(){const ctx=canvas2D;if(!ctx)return;const W=viewport.w,H=v
  for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const normal=R.map(r=>r[axis]*sign);if(dot(normal,vSub(eye,b.c))<.001)continue;const other=[0,1,2].filter(k=>k!==axis),verts=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([u,v])=>{const pt=[0,0,0];pt[axis]=half[axis]*sign;pt[other[0]]=u*half[other[0]];pt[other[1]]=v*half[other[1]];return transformPoint(b,pt)});
  const xy=verts.map(project);if(xy.some(v=>!v))continue;const shade=.74+.26*Math.max(0,dot(normal,norm([.5,.9,.6])));const col=base.map(v=>Math.round(255*clamp(v*shade,0,1)));faces.push({xy,dist:dot(vSub(b.c,eye),fwd()),col:`rgb(${col.join(',')})`,stroke:['Foundation wall','Strip footing','Concrete wall section'].includes(b.n)?'transparent':'#614d3930'})}}
  faces.sort((a,b)=>b.dist-a.dist);for(const face of faces){ctx.beginPath();ctx.moveTo(...face.xy[0]);for(let i=1;i<4;i++)ctx.lineTo(...face.xy[i]);ctx.closePath();ctx.fillStyle=face.col;ctx.fill();ctx.strokeStyle=face.stroke;ctx.lineWidth=.7;ctx.stroke()}
- const overlays=[{pieces:(selected?.g?world.pieces.filter(b=>b.g===selected.g):selected?.id?world.pieces.filter(b=>b.id===selected.id):[]).concat(preview?.indicators||[]),color:'rgba(54,173,255,.18)',stroke:'#4fbaff'}, {pieces:preview?.boxes||[],color:current().kind==='inspect'&&!gesture?.editId?'rgba(54,173,255,.18)':preview?.valid?'rgba(55,220,123,.32)':'rgba(255,85,63,.35)',stroke:current().kind==='inspect'&&!gesture?.editId?'#4fbaff':preview?.valid?'#48df83':'#ff644b'}];
- for(const overlay of overlays){for(const b of overlay.pieces){const h=b.s.map(x=>x/2),corners=Array.from({length:8},(_,i)=>project(transformPoint(b,h.map((v,k)=>i&(1<<k)?v:-v))));if(corners.some(p=>!p))continue;ctx.fillStyle=overlay.color;ctx.strokeStyle=overlay.stroke;ctx.lineWidth=1.65;for(const ids of [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]]){ctx.beginPath();ctx.moveTo(...corners[ids[0]]);for(let i=1;i<4;i++)ctx.lineTo(...corners[ids[i]]);ctx.closePath();ctx.fill();ctx.stroke()}}}
+ const visual=previewVisualState(),inspect=current().kind==='inspect'&&!gesture?.editId,fill=inspect?visual.inspectFill:preview?.valid?visual.materialFill:visual.blockedFill;
+ const overlays=[{pieces:(selected?.g?world.pieces.filter(b=>b.g===selected.g):selected?.id?world.pieces.filter(b=>b.id===selected.id):[]),fill:visual.selectionFill,color:`rgba(54,173,255,${visual.selectionFill})`,stroke:'rgba(100,190,206,.65)'}, {pieces:preview?.boxes||[],fill,color:inspect?`rgba(54,173,255,${fill})`:preview?.valid?`rgba(55,220,123,${fill})`:`rgba(255,85,63,${fill})`,stroke:inspect?'rgba(100,190,206,.65)':preview?.valid?'#48df83':'#ff644b'}];
+ for(const overlay of overlays){for(const b of overlay.pieces){const h=b.s.map(x=>x/2),corners=Array.from({length:8},(_,i)=>project(transformPoint(b,h.map((v,k)=>i&(1<<k)?v:-v))));if(corners.some(p=>!p))continue;ctx.fillStyle=overlay.color;ctx.strokeStyle=overlay.stroke;ctx.lineWidth=1.65;for(const ids of [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]]){ctx.beginPath();ctx.moveTo(...corners[ids[0]]);for(let i=1;i<4;i++)ctx.lineTo(...corners[ids[i]]);ctx.closePath();if(overlay.fill>0)ctx.fill();ctx.stroke()}}}
  if(visible.length>3200){ctx.fillStyle='#273744';ctx.fillRect(W/2-120,H-110,240,23);ctx.fillStyle='#fff';ctx.fillText('Enable WebGL to render all pieces',W/2-110,H-93)}
 }
 function resized(){viewport.w=innerWidth;viewport.h=innerHeight;viewport.dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(viewport.w*viewport.dpr);canvas.height=Math.round(viewport.h*viewport.dpr);sceneDirty=true}
@@ -860,8 +1042,17 @@ function draw(){if(!gl||!program){if(canvas2D)drawSoftware();sceneDirty=false;re
  gl.viewport(0,0,canvas.width,canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(program);gl.uniformMatrix4fv(glLoc.vp,false,new Float32Array(viewProjection()));
  gl.enable(gl.DEPTH_TEST);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);gl.uniform4f(glLoc.tint,0,0,0,0);
  bufferDraw(6,gl.TRIANGLES);bufferDraw(7,gl.LINES);bufferDraw(0,gl.TRIANGLES);bufferDraw(1,gl.LINES);
- if(drawCounts[4]){gl.depthMask(false);gl.uniform4f(glLoc.tint,.20,.68,1,.14);bufferDraw(4,gl.TRIANGLES);gl.depthMask(true);gl.uniform4f(glLoc.tint,.25,.75,1,.95);gl.lineWidth(2);bufferDraw(5,gl.LINES)}
- if(drawCounts[2]){let ok=preview.valid,info=current();let co=info.kind==='inspect'&&!gesture?.editId?[.3,.75,1]:info.kind==='remove'?[1,.30,.25]:ok?[.28,.87,.47]:[1,.38,.29];gl.depthMask(false);gl.uniform4f(glLoc.tint,...co,.32);bufferDraw(2,gl.TRIANGLES);gl.depthMask(true);gl.uniform4f(glLoc.tint,...co,.88);bufferDraw(3,gl.LINES)}
+ const visual=previewVisualState();
+ if(drawCounts[4]){
+  if(visual.selectionFill>0){gl.depthMask(false);gl.uniform4f(glLoc.tint,.20,.68,1,visual.selectionFill);bufferDraw(4,gl.TRIANGLES);gl.depthMask(true)}
+  gl.uniform4f(glLoc.tint,.39,.75,.81,.65);gl.lineWidth(1.5);bufferDraw(5,gl.LINES);
+ }
+ if(drawCounts[2]){
+  const ok=preview.valid,info=current(),inspect=info.kind==='inspect'&&!gesture?.editId,fill=inspect?visual.inspectFill:ok?visual.materialFill:visual.blockedFill;
+  const co=inspect?[.39,.75,.81]:info.kind==='remove'?[1,.30,.25]:ok?[.28,.87,.47]:[1,.38,.29];
+  if(fill>0){gl.depthMask(false);gl.uniform4f(glLoc.tint,...co,fill);bufferDraw(2,gl.TRIANGLES);gl.depthMask(true)}
+  gl.uniform4f(glLoc.tint,...co,inspect?.65:.88);bufferDraw(3,gl.LINES);
+ }
  gl.uniform4f(glLoc.tint,0,0,0,0);sceneDirty=false
 }
 function renderPlacementOverlay(){
@@ -905,12 +1096,18 @@ function renderHUD(){const t=preview?.text||(recipe?.kind==='fpoly'?'Add foundat
  const actualAxis=gesture?.type==='length'?gesture.axis:preview?.boxes?.[0]?.placementAxis??settings.axis,actualSign=gesture?.type==='length'?(gesture.grip==='End'?-Math.sign(gesture.amount):Math.sign(gesture.amount)):(settings.directionSign||1);
  $('#runDirection').style.display=$('#alignmentToggle').style.display=buildable?'inline-block':'none';
  $('#runDirection').textContent='XYZ'[actualAxis]+(actualSign<0?' ←':' →');$('#alignmentToggle').textContent=settings.alignment+' · B';
+ $('#seatChoices').style.display=buildable||selected?.id&&findFoundationSupport(moveBody())?'flex':'none';
+ for(const button of $$('[data-seat]'))button.setAttribute('aria-pressed',String(button.dataset.seat===settings.alignment));
+ $('#moveReadout').style.display=buildable||selected?'inline-block':'none';if(buildable||selected)$('#moveReadout').textContent='Wheel · '+preciseInches(moveAmount(moveBody()));
+ const materialOption=$('#moveStep option[value="material"]'),moveHint=$('#fields .moveControls small');
+ if(materialOption){const text='Material thickness · '+preciseInches(materialThickness(moveBody()));if(materialOption.textContent!==text)materialOption.textContent=text}
+ if(moveHint){const text='One notch: '+preciseInches(moveAmount(moveBody()))+' · Shift + wheel: fine';if(moveHint.textContent!==text)moveHint.textContent=text}
  const snapKinds=[settings.snapEnds!==false?'Ends':'',settings.snapMids!==false?'Mid':'',settings.layoutSnap!==false?fmt(settings.layoutSpacing):''].filter(Boolean);
  $('#snapStatus').textContent=key.alt?'Freehand':isSnapping()?(snapKinds.join(' · ')||'Grid '+fmt(settings.snap)):'Free placement';
  const snapLabel=preview?.snapInfo?.label||'';if($('#snapFeedback').textContent!==snapLabel)$('#snapFeedback').textContent=snapLabel;
- $('#precisionBar .precisionKeys').textContent=gesture?.type==='length'?'Look / WASD while drawing · R: turn · Shift+R: reverse · Release: place':gesture?'Release to finish · Alt: fine adjustment · Esc: cancel':selected?.g?'Drag to move · C: exact dimensions':selected?'Drag body to move · drag end to resize · C: exact dimensions':'Hold left mouse & draw · R: turn · B: align · E: inventory';
+ $('#precisionBar .precisionKeys').textContent=gesture?.type==='length'?'Wheel: position · Look / WASD while drawing · R: turn · Release: place':gesture?'Release to finish · Wheel: position · Esc: cancel':selected?'Wheel: position · Drag to edit · C: adjust':'Wheel: position · B: seating · R: turn · C: adjust';
  document.body.classList.toggle('dragging',!!gesture&&gesture.moved>=5);
- $('#resumeHint').firstChild.textContent=document.body.classList.contains('mouseReleased')?'WASD resumes movement · E opens inventory':'WASD to move · Mouse to look';
+ $('#resumeHint').firstChild.textContent='WASD to move · Mouse to look';
  renderPlacementOverlay();
 }
 // Flight is the only camera mode. Mouse always looks, WASD flies, Space/Shift rise/fall.
@@ -919,7 +1116,7 @@ function worldFocus(){if(!world.pieces.length)return [0,45,0];let lo=[Infinity,I
 function tick(t){const dt=clamp((t-(tick.prev??t))/1000,0,.05);tick.prev=t;
  if(!paused){
   let side=Number(!!(key.d||key.arrowright))-Number(!!(key.a||key.arrowleft)),fore=Number(!!(key.w||key.arrowup))-Number(!!(key.s||key.arrowdown));
-  const vertical=Number(!!key[' '])-Number(!!(key.shift||key.q));
+  const vertical=Number(!!key[' '])-Number(!!(key.q||key.shift&&performance.now()-shiftPressedAt>100));
   const len=Math.hypot(side,fore,vertical)||1,velocity=(key.control?390:170)*dt;
   const controlsFocused=['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement?.tagName);
   if((side||fore||vertical)&&(!gesture||gesture.type==='length')&&!controlsFocused&&worldInputReady()){
@@ -931,7 +1128,7 @@ function tick(t){const dt=clamp((t-(tick.prev??t))/1000,0,.05);tick.prev=t;
   if(sceneDirty||mouse.dirty||gesture||recipe){plan();draw();renderHUD();mouse.dirty=false}
  }requestAnimationFrame(tick)
 }
-let pointerPosition=null,captureMouse=true,capturePending=false;
+let pointerPosition=null,captureMouse=true,capturePending=false,shiftPressedAt=0,wheelRemainder=0;
 function menusOpen(){return document.body.classList.contains('showInventory')||document.body.classList.contains('showInspector')||document.body.classList.contains('hasModal')}
 function worldInputReady(){return !menusOpen()&&!$('#moreMenu').open}
 function unlockForMenus(){
@@ -941,6 +1138,7 @@ function unlockForMenus(){
 }
 function flightLock(){
  canvas.focus({preventScroll:true});pointerPosition=null;
+ if(!captureMouse){document.body.classList.add('mouseReleased');return}
  document.body.classList.remove('mouseReleased');
  if(!captureMouse||capturePending||document.pointerLockElement===canvas)return;
  capturePending=true;
@@ -956,8 +1154,9 @@ function actionDrop(idx,x,y){
 }
 function setCursor(e){mouse.x=viewport.w/2;mouse.y=viewport.h/2;mouse.inside=true;mouse.dirty=true}
 function screenLengthStart(e,h){
+ h=placementReference(h);
  const it=current(),base=it.kind==='panel'?placePanel(it,h):placePrimitive(it,h);if(!base)return null;
- const ax=base.placementAxis??(it.kind==='panel'?[0,1,2].reduce((m,i)=>base.s[i]>base.s[m]?i:m,0):settings.axis);
+ applyPlacementShift(base);const ax=base.placementAxis??(it.kind==='panel'?[0,1,2].reduce((m,i)=>base.s[i]>base.s[m]?i:m,0):settings.axis);
  const sign=base.startSign||1,anchor=Number.isFinite(base.startPoint)?base.startPoint:base.c[ax]-base.s[ax]/2;
  const vector=base.lengthVector||base.guideVector||null;
  const point=base.gripAnchor?[...base.gripAnchor]:base.guideVector?[...base.guideOrigin]:[...base.c];
@@ -1024,7 +1223,7 @@ function turnMaterial(reverse=false){
  else settings.axis=(settings.axis+1)%3;
  refreshLengthDrag({reverse});saveLocal();renderInspector();sceneDirty=mouse.dirty=true;
 }
-function cycleAlignment(){const modes=['Outside','Center','Inside'];settings.alignment=modes[(modes.indexOf(settings.alignment)+1)%modes.length];refreshLengthDrag({align:true});saveLocal();renderInspector();sceneDirty=mouse.dirty=true}
+function cycleAlignment(){const modes=['Outside','Center','Inside'];setSeating(modes[(modes.indexOf(settings.alignment)+1)%modes.length])}
 function looseSelection(){return selected?.id&&world.pieces.find(b=>b.id===selected.id&&!b.g)}
 function isEditingPiece(b){return !!gesture&&(b.id===gesture.editId||!!gesture.editGroup&&b.g===gesture.editGroup)}
 function editBoxesValid(boxes,g){return boxes.every(b=>validMembers([b],g.editId))}
@@ -1032,7 +1231,7 @@ function startGroupMove(id,h){
  const bases=world.pieces.filter(b=>b.g===id).map(copy),lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
  for(const b of bases){const E=aabb(b);for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],b.c[i]-E[i]);hi[i]=Math.max(hi[i],b.c[i]+E[i])}}
  const base={c:lo.map((v,i)=>(v+hi[i])/2),s:lo.map((v,i)=>hi[i]-v),n:world.groups[id].kind+' assembly'};
- return{type:'move',editId:id,editGroup:id,bases,base,point:[...h.point],normal:norm(h.normal),moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2};
+ return{type:'move',editId:id,editGroup:id,bases,base,baseOrigin:[...base.c],point:[...h.point],normal:norm(h.normal),moved:0,virtualX:viewport.w/2,virtualY:viewport.h/2};
 }
 function memberEnds(b){
  const axis=b.placementAxis??[0,1,2].reduce((m,i)=>b.s[i]>b.s[m]?i:m,0),T=axesRotation(b).map(row=>row[axis]);
@@ -1069,7 +1268,7 @@ function movePreview(g){
   }
   if(chosen)b.c[axis]=chosen.value;
  }
- const translation=vSub(b.c,g.base.c),boxes=g.editGroup?g.bases.map(p=>({...p,c:vAdd(p.c,translation)})):[b],valid=editBoxesValid(boxes,g);
+ const translation=vSub(b.c,g.baseOrigin||g.base.c),boxes=g.editGroup?g.bases.map(p=>({...p,c:vAdd(p.c,translation)})):[b],valid=editBoxesValid(boxes,g);
  return{boxes,valid,translation,anchorPoint:g.base.c,targetPoint:b.c,snapInfo,indicators:[],text:'Move '+b.n+(snapInfo?' · '+snapInfo.label:'')+(!valid?' · blocked':'')};
 }
 function finishEdit(g){
@@ -1121,10 +1320,9 @@ canvas.addEventListener('pointerdown',e=>{
 });
 canvas.addEventListener('pointermove',e=>{
  if(!worldInputReady()){pointerPosition=null;return}
- if(document.body.classList.contains('mouseReleased')&&!gesture)return;
  const locked=document.pointerLockElement===canvas,last=pointerPosition;
  pointerPosition=[e.clientX,e.clientY];
- const dx=locked?e.movementX:last?e.clientX-last[0]:0,dy=locked?e.movementY:last?e.clientY-last[1]:0;
+ const dx=locked?e.movementX:last?e.clientX-last[0]:Math.abs(e.movementX)<200?e.movementX:0,dy=locked?e.movementY:last?e.clientY-last[1]:Math.abs(e.movementY)<200?e.movementY:0;
  if(gesture?.type==='length')dragMember(gesture,dx,dy);
  else if(gesture?.type==='move'){
   gesture.virtualX+=dx;gesture.virtualY+=dy;gesture.moved=Math.max(gesture.moved,Math.hypot(gesture.virtualX-viewport.w/2,gesture.virtualY-viewport.h/2));sceneDirty=mouse.dirty=true;
@@ -1163,7 +1361,12 @@ function endCanvas(e){
 canvas.addEventListener('pointerup',endCanvas);
 canvas.addEventListener('pointercancel',()=>{gesture=null;pointerPosition=null;sceneDirty=geometryDirty=true});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('wheel',e=>{e.preventDefault();activeSlot=(activeSlot+(e.deltaY>0?1:7))%8;equip(hotbar[activeSlot]);mouse.dirty=true},{passive:false});
+canvas.addEventListener('wheel',e=>{
+ if(e.ctrlKey||!worldInputReady())return;e.preventDefault();if(!e.deltaY)return;
+ if(e.shiftKey)key.shift=false;
+ if(e.deltaMode===0&&Math.abs(e.deltaY)<40){wheelRemainder+=e.deltaY;if(Math.abs(wheelRemainder)<40)return;const direction=-Math.sign(wheelRemainder);wheelRemainder%=40;nudgePosition(direction,e.shiftKey)}
+ else{wheelRemainder=0;nudgePosition(-Math.sign(e.deltaY),e.shiftKey)}
+},{passive:false});
 
 canvas.addEventListener('dragover',e=>e.preventDefault());canvas.addEventListener('drop',e=>{e.preventDefault();const idx=Number(e.dataTransfer?.getData('text/framecraft'));if(Number.isInteger(idx)&&idx>=0&&idx<MATERIALS.length)actionDrop(idx,e.clientX,e.clientY)});
 $('#materialList').addEventListener('click',e=>{const b=e.target.closest('[data-index]');if(b){equip(+b.dataset.index);showInventory(false)}});
@@ -1187,6 +1390,7 @@ document.addEventListener('pointerlockchange',()=>{
 document.addEventListener('pointerlockerror',()=>{capturePending=false;captureMouse=false;sceneDirty=true});
 addEventListener('keydown',e=>{
  let k=e.key.toLowerCase(),tag=document.activeElement?.tagName;
+ if(k==='shift'&&!e.repeat)shiftPressedAt=performance.now();
  if(k==='e'&&!$('#modal').classList.contains('show')&&!e.ctrlKey&&!e.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes(tag)){e.preventDefault();showInventory();return}
  if(k==='escape'){
   captureMouse=false;capturePending=false;
@@ -1196,7 +1400,7 @@ addEventListener('keydown',e=>{
   if(document.body.classList.contains('showInspector')){e.preventDefault();showInspector(false);return}
   if($('#modal').classList.contains('show')){closeModal();return}
   if(recipe||gesture||tapeStart){recipe=null;gesture=null;tapeStart=tapeResult=null;sceneDirty=geometryDirty=true;renderInspector();toast('Cancelled command');return}
-  cancelTool();
+  cancelTool();sceneDirty=geometryDirty=mouse.dirty=true;
   // Escape releases optional mouse capture; ordinary mouse look remains available.
   return;
  }
@@ -1247,9 +1451,7 @@ function projectMenu(){modal(`<div class="eyebrow">FREEBUILD</div><h1>Project & 
 
 function modal(html){$('#modalInner').innerHTML=html;$('#modal').classList.add('show');document.body.classList.add('hasModal');unlockForMenus();key={}}function closeModal(){$('#modal').classList.remove('show');document.body.classList.remove('hasModal');flightLock()}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal'||e.target.closest('[data-close-modal]'))closeModal()});
-function help(){modal(`<div class="eyebrow">FRAMECRAFT · V4</div><h1>Build, then adjust.</h1><p>Use <b>WASD</b> to move. Your first movement key or building click captures the mouse for continuous turning. <b>Esc</b> releases it for menus; WASD resumes. The scene uses one aiming cursor.</p>
-<div class="helpGrid"><div><h2>Place</h2><p><kbd>E</kbd> choose a material<br><kbd>Hold LMB + drag</kbd> draw its length; mouse look and WASD stay active<br><kbd>Release</kbd> place<br><kbd>R</kbd> turn the run while drawing<br><kbd>Shift + R</kbd> reverse direction<br><kbd>F</kbd> rotate the cross-section<br><kbd>X</kbd> change the fixed grip<br><kbd>B</kbd> Outside / Center / Inside seating</p><h2>Edit</h2><p><kbd>0 / V</kbd> select mode<br>Click a piece to select it.<br>Drag its body to move along the grabbed face.<br>Drag an end handle to resize; the opposite end stays fixed.<br>Drag a wall, floor, roof, or foundation assembly to move it together.<br><kbd>C</kbd> exact position, dimensions, and angles</p></div><div><h2>Snap</h2><p>Ends and midpoints appear automatically near the piece you aim at. Aim near a board’s top edge to seat the next piece directly beside it. Butt joints land on the nearest blocking face. Layout marks default to <b>16″</b>. A gold marker names the active snap, which stays steady until you drag away.</p><p><kbd>C</kbd> change layout spacing, first-mark offset, and grid precision; enable or disable target types<br><kbd>Alt</kbd> hold for slower mouse look and freehand fine adjustment<br><kbd>N</kbd> toggle all snapping<br><kbd>T</kbd> cycle stacked targets</p><h2>Move & undo</h2><p><kbd>Space / Shift</kbd> up / down<br><kbd>Ctrl</kbd> move faster<br><kbd>E</kbd> inventory and project tools<br><kbd>Ctrl Z / Ctrl Y</kbd> undo / redo<br><kbd>Esc</kbd> cancel an active drag<br><kbd>Right-click</kbd> remove target</p></div></div>
-<p>Recipe assemblies retain their settings when moved. Use C to change a wall, floor, roof, or foundation recipe.</p><p style="font-size:12px">Creative sandbox only: connections, header spans, footing design and structural loading require separate verification.</p><div class="row"><button class="btn primary" data-close-modal>Back to building</button><button class="btn" id="modalDemo">Sample house</button></div>`);$('#modalDemo').onclick=()=>{closeModal();demoHouse()}}
+function help(){modal(`<div class="eyebrow">FRAMECRAFT · V5</div><h1>Place it. Slide it. Fine-tune it.</h1><p>Use <b>WASD</b> and the mouse to move and look. Your starting grip stays fixed while you draw. Esc cancels the current action; mouse look keeps working. Browsers release capture on Esc, and the next movement key or scene click recaptures it.</p><div class="helpGrid"><div><h2>Place</h2><p><kbd>E</kbd> choose material<br><kbd>Hold LMB + draw</kbd> set length<br><kbd>Release</kbd> place<br><kbd>R</kbd> turn · <kbd>Shift R</kbd> reverse<br><kbd>F</kbd> turn the cross-section<br><kbd>X</kbd> change the grip</p><h2>Position</h2><p><kbd>Wheel</kbd> slide by the chosen amount<br><kbd>Shift + wheel</kbd> fine adjustment<br><kbd>C</kbd> Move by: material thickness, 16″, 24″, Fine, or Custom<br>Custom shows one amount field. Feet, decimals, and fractions work.</p><p>Aim at a neighboring side face for a snug fit. Ends and bases stay aligned. Faint outlines leave the contact face visible.</p></div><div><h2>Choose the support fit</h2><p>Use <b>Outside / Middle / Inside</b> in C, or <kbd>B</kbd> to cycle. A joist across a foundation starts on that reference; a parallel piece aligns its edge to it.</p><h2>Edit</h2><p><kbd>0 / V</kbd> select a piece<br>Drag its body to move or an end to resize.<br>Use the wheel for precise steps.<br>Assemblies move together with their recipes.<br><kbd>C</kbd> simple controls first; Advanced holds coordinates, rotation, and detailed snapping</p><p><kbd>Ctrl Z / Ctrl Y</kbd> undo / redo<br><kbd>Alt</kbd> freehand fine adjustment<br><kbd>N</kbd> toggle snapping<br><kbd>T</kbd> cycle targets<br><kbd>Right-click</kbd> remove<br><kbd>Space / Shift or Q</kbd> up / down</p></div></div><p style="font-size:12px">Creative sandbox only: connections, header spans, footing design and structural loading require separate verification.</p><div class="row"><button class="btn primary" data-close-modal>Back to building</button><button class="btn" id="modalDemo">Sample house</button></div>`);$('#modalDemo').onclick=()=>{closeModal();demoHouse()}}
 
 $('#helpBtn').onclick=help;
 function downloadText(name,data,type){const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000)}

@@ -1,5 +1,15 @@
 # Changes
 
+## v5
+
+- Position every loose material and selected assembly with the wheel. Move by actual stock thickness, 16-inch or 24-inch spacing, a fine increment, or one custom amount; Shift+wheel uses fine movement.
+- Show size, length, support seating, and Move by first. Retain precise coordinates, rotation, and snap configuration under collapsible Advanced sections that stay open while editing.
+- Provide direct Outside / Middle / Inside choices. Match foundation boundary winding, promote near-cap aims, and support parallel, vertical, and perpendicular material seating.
+- Align literal side-face placements without staggering, for all four grips and all 31 stock materials. Follow the frame of pitched rafters and panels.
+- Remove the obstructing 3D blue marker cubes and solid blue selection/inspect fills; retain small screen markers and faint material outlines.
+- Keep mouse look working after Escape, preserve material hotbar shortcuts, and recapture on the next movement key or scene click. Menus keep their own usable pointer.
+- Preserve cross-section height when turning horizontal material.
+
 ## v4
 
 - Keep mouse look and WASD active while drawing to length; the starting grip stays fixed in world space.

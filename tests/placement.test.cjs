@@ -275,7 +275,13 @@ test('every loose material preserves its stock dimensions and grip when clicked 
                   expected[cross[0]] = section[flip ? 1 : 0];
                   expected[cross[1]] = section[flip ? 0 : 1];
                 }
-                if (!board.s.every((value, i) => almost(value, expected[i]))) {
+                // A horizontal turn preserves the section's height in v5. Check
+                // physical stock dimensions here; the orientation test below
+                // separately verifies that X/Z turns never lay a piece flat.
+                const sameDimensions = item.kind === 'panel'
+                  ? board.s.every((value, i) => almost(value, expected[i]))
+                  : almost(board.s[run], item.L) && board.s.filter((_,i) => i !== run).sort((a,b) => a-b).every((value,i) => almost(value, expected.filter((_,j) => j !== run).sort((a,b) => a-b)[i]));
+                if (!sameDimensions) {
                   failures.push(`${context}: dimensions ${board.s} differ from stock ${expected}`);
                 }
                 const anchor = point[run];
@@ -406,6 +412,7 @@ test('repeating angled boards uses exact on-center spacing perpendicular to thei
 
 test('snap controls and the N shortcut persist their state after reload', async () => {
   await page.keyboard.press('c');
+  await page.locator('#fields details[data-section="advanced"] > summary').click();
   await page.locator('#fields [data-field="snap"]').selectOption('0.25');
   await page.keyboard.press('Escape');
   await page.locator('#snapToggle').click();
@@ -823,6 +830,7 @@ test('midpoint snapping stays steady under hand jitter and releases when dragged
 
 test('custom spacing and offset accept fractions and control real drag snapping', async () => {
   await page.keyboard.press('c');
+  await page.locator('#fields details[data-section="advanced"] > summary').click();
   await page.locator('#fields [data-field="layoutSpacing"]').fill('1\' 11 7/8"');
   await page.locator('#fields [data-field="layoutSpacing"]').press('Tab');
   await page.locator('#fields [data-field="layoutOffset"]').fill('3 1/4"');
@@ -876,7 +884,8 @@ test('an almost end-on drag has a controlled length instead of a projection jump
 test('precision controls stay out of the scene until explicitly opened', async () => {
   assert.equal(await page.locator('.layoutControls').isVisible(), false);
   await page.keyboard.press('c');
-  assert.equal(await page.locator('#fields [data-field="layoutSpacing"]').isVisible(), true);
+  assert.equal(await page.locator('#fields [data-field="layoutSpacing"]').isVisible(), false);
+  await page.locator('#fields details[data-section="advanced"] > summary').click();
   assert.equal(await page.locator('#fields [data-field="snap"]').isVisible(), true);
 });
 
@@ -1254,4 +1263,617 @@ test('an occupied adjacent face is blocked without skipping to a gap or stacking
   assert.equal(result.count, 2);
   closeTo(result.board.c[2], 5.5, 'The intended neighboring slot stays selected');
   closeTo(result.board.c[1], .75, 'Blocked inference does not silently stack the board');
+});
+
+test('v5 literal side-face placement aligns horizontal neighbors for every grip', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) for (const side of [-1, 1]) {
+      equip(MATERIALS.findIndex(x => x.name === 'Pressure-treated sill'));
+      Object.assign(settings, defaults, { size: '2x6', axis: 0, len: 96, grip, gripOffset: 12, alignment: 'Center', directionSign: 1 });
+      const source = { id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Existing sill', layer: 'Floor' };
+      world = { name: 'Side-face placement', pieces: [source], groups: {}, guides: [], next: 2 };
+      const state = buildGhost({ box: source, point: [48, .75, side * 2.75], normal: [0, 0, side] });
+      cases.push({ grip, side, c: state.boxes[0].c, s: state.boxes[0].s, anchor: state.anchorPoint, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const label = `${state.grip}/${state.side}`;
+    assert.equal(state.valid, true, label);
+    closeTo(state.c[0], 48, `${label}: runs share the same start and end`);
+    closeTo(state.c[1], .75, `${label}: bases remain level`);
+    closeTo(state.c[2], state.side * 5.5, `${label}: adjoining faces touch without a gap`);
+    assert.deepEqual(state.s, [96, 1.5, 5.5]);
+    closeTo(state.anchor[0], { Start: 0, Center: 48, End: 96, Offset: 12 }[state.grip], `${label}: the chosen grip is derived from the aligned body`);
+  }
+});
+
+test('v5 literal stud side faces create a snug pack at the same base for every grip', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) for (const side of [-1, 1]) {
+      equip(MATERIALS.findIndex(x => x.name === 'Standard stud'));
+      Object.assign(settings, defaults, { size: '2x6', axis: 1, len: 96, grip, gripOffset: 12, alignment: 'Center', directionSign: 1 });
+      const source = { id: 1, g: null, c: [0, 48, 0], s: [1.5, 96, 5.5], n: 'Existing stud', layer: 'Walls' };
+      world = { name: 'Stud side-face placement', pieces: [source], groups: {}, guides: [], next: 2 };
+      const state = buildGhost({ box: source, point: [side * .75, 48, 0], normal: [side, 0, 0] });
+      cases.push({ grip, side, c: state.boxes[0].c, s: state.boxes[0].s, anchor: state.anchorPoint, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const label = `${state.grip}/${state.side}`;
+    assert.equal(state.valid, true, label);
+    closeTo(state.c[0], state.side * 1.5, `${label}: centers advance by exactly the actual stud thickness`);
+    closeTo(state.c[1], 48, `${label}: the new stud is not staggered upward`);
+    closeTo(state.c[2], 0, `${label}: depths remain aligned`);
+    assert.deepEqual(state.s, [1.5, 96, 5.5]);
+    closeTo(state.anchor[1], { Start: 0, Center: 48, End: 96, Offset: 12 }[state.grip], `${label}: grip metadata matches the snug body`);
+  }
+});
+
+test('v5 top-edge snug placement works for Center End and Offset grips too', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) {
+      for (const vertical of [false, true]) {
+        equip(MATERIALS.findIndex(x => x.name === (vertical ? 'Standard stud' : 'Pressure-treated sill')));
+        Object.assign(settings, defaults, { size: '2x6', axis: vertical ? 1 : 0, len: 96, grip, gripOffset: 12, alignment: 'Center', directionSign: 1 });
+        const source = vertical
+          ? { id: 1, g: null, c: [0, 48, 0], s: [1.5, 96, 5.5], n: 'Existing stud', layer: 'Walls' }
+          : { id: 1, g: null, c: [48, .75, 0], s: [96, 1.5, 5.5], n: 'Existing sill', layer: 'Floor' };
+        world = { name: 'All-grip edge placement', pieces: [source], groups: {}, guides: [], next: 2 };
+        const state = buildGhost({ box: source, point: vertical ? [.65, 96, 0] : [48, 1.5, 2.6], normal: [0, 1, 0] });
+        cases.push({ grip, vertical, c: state.boxes[0].c, anchor: state.anchorPoint, valid: state.valid });
+      }
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const expected = state.vertical ? [1.5, 48, 0] : [48, .75, 5.5];
+    assert.equal(state.valid, true, `${state.grip}/${state.vertical}`);
+    for (let i = 0; i < 3; i++) closeTo(state.c[i], expected[i], `${state.grip}/${state.vertical}: snug coordinate ${i}`);
+    closeTo(state.anchor[state.vertical ? 1 : 0], { Start: 0, Center: 48, End: 96, Offset: 12 }[state.grip], 'Grip selection changes the grip, not the snug body position');
+  }
+});
+
+test('v5 aiming at the side just below a foundation cap seats a sill on top', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const alignment of ['Outside', 'Center', 'Inside']) {
+      equip(MATERIALS.findIndex(x => x.name === 'Pressure-treated sill'));
+      Object.assign(settings, defaults, { size: '2x6', axis: 0, len: 96, grip: 'Start', alignment, directionSign: 1 });
+      world = { name: 'Concrete cap targeting', pieces: [], groups: {}, guides: [], next: 1 };
+      addGroup('foundation', { a: [0, 0], b: [192, 96], y: 8, depth: 48, thickness: 8, footW: 0, footD: 10, slab: false });
+      const aim = [48, 7.8, 4];
+      eye = [48, 100, 300];
+      const d = vSub(aim, eye); yaw = Math.atan2(d[0], -d[2]); pitch = Math.atan2(d[1], Math.hypot(d[0], d[2]));
+      const state = buildGhost(cast());
+      cases.push({ alignment, c: state.boxes[0].c, s: state.boxes[0].s, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    assert.equal(state.valid, true, state.alignment);
+    closeTo(state.c[1] - state.s[1] / 2, 8, `${state.alignment}: bottom rests exactly on the concrete cap`);
+    closeTo(state.c[2], { Outside: -1.25, Center: 0, Inside: 1.25 }[state.alignment], `${state.alignment}: selected seating remains available from a side aim`);
+  }
+});
+
+test('v5 vertical and parallel materials honor foundation Outside Middle and Inside seating', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const vertical of [false, true]) for (const alignment of ['Outside', 'Center', 'Inside']) {
+      equip(MATERIALS.findIndex(x => x.name === (vertical ? 'Standard stud' : 'Floor joist')));
+      Object.assign(settings, defaults, { size: vertical ? '2x6' : '2x10', axis: vertical ? 1 : 0, flip: vertical ? 0 : 1, len: 96, grip: 'Start', alignment, directionSign: 1 });
+      world = { name: 'Material foundation seating', pieces: [], groups: {}, guides: [], next: 1 };
+      const id = addGroup('foundation', { a: [0, 0], b: [192, 96], y: 8, depth: 48, thickness: 8, footW: 0, footD: 10, slab: false });
+      const source = world.pieces.find(b => b.g === id && Math.abs(b.c[2]) < EPS && b.s[0] > b.s[2]);
+      const state = buildGhost({ box: source, point: [48, 8, 0], normal: [0, 1, 0] });
+      cases.push({ vertical, alignment, c: state.boxes[0].c, s: state.boxes[0].s, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const label = `${state.vertical ? 'stud' : 'joist'}/${state.alignment}`;
+    assert.equal(state.valid, true, label);
+    closeTo(state.c[1] - state.s[1] / 2, 8, `${label}: material remains seated on top`);
+    if (state.alignment === 'Outside') closeTo(state.c[2] - state.s[2] / 2, -4, `${label}: outside edge is flush`);
+    else if (state.alignment === 'Inside') closeTo(state.c[2] + state.s[2] / 2, 4, `${label}: inside edge is flush`);
+    else closeTo(state.c[2], 0, `${label}: footprint is centered`);
+    closeTo(state.s[state.vertical ? 1 : 0], 96, `${label}: seating does not change the material length`);
+  }
+});
+
+test('v5 a perpendicular joist starts at the selected foundation face for every grip', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [];
+    for (const grip of ['Start', 'Center', 'End', 'Offset']) for (const alignment of ['Outside', 'Center', 'Inside']) {
+      equip(MATERIALS.findIndex(x => x.name === 'Floor joist'));
+      Object.assign(settings, defaults, { size: '2x10', axis: 2, flip: 0, len: 96, grip, gripOffset: 12, alignment, directionSign: 1 });
+      world = { name: 'Perpendicular joist seating', pieces: [], groups: {}, guides: [], next: 1 };
+      const id = addGroup('foundation', { a: [0, 0], b: [192, 96], y: 8, depth: 48, thickness: 8, footW: 0, footD: 10, slab: false });
+      const source = world.pieces.find(b => b.g === id && Math.abs(b.c[2]) < EPS && b.s[0] > b.s[2]);
+      const state = buildGhost({ box: source, point: [48, 8, 0], normal: [0, 1, 0] });
+      cases.push({ grip, alignment, c: state.boxes[0].c, s: state.boxes[0].s, anchor: state.anchorPoint, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const label = `${state.grip}/${state.alignment}`, anchor = { Outside: -4, Center: 0, Inside: 4 }[state.alignment];
+    const offset = { Start: 0, Center: 48, End: 96, Offset: 12 }[state.grip];
+    assert.equal(state.valid, true, label);
+    closeTo(state.anchor[2], anchor, `${label}: selected grip lands on the chosen foundation reference`);
+    closeTo(state.c[2], anchor + 48 - offset, `${label}: body honors the chosen grip`);
+    closeTo(state.s[2], 96, `${label}: joist length is preserved`);
+    closeTo(state.s[1], 9.25, `${label}: nominal 2x10 retains actual depth`);
+    closeTo(state.c[1] - state.s[1] / 2, 8, `${label}: joist remains on top of concrete`);
+  }
+});
+
+test('v5 concave foundation Outside stays stable under reversed winding and camera changes', async () => {
+  const cases = await page.evaluate(() => {
+    const cases = [], outline = [[0, 0], [240, 0], [240, 96], [96, 96], [96, 240], [0, 240]];
+    for (const reverse of [false, true]) for (const verticalEdge of [false, true]) for (const cameraSide of [-1, 1]) for (const alignment of ['Outside', 'Center', 'Inside']) {
+      equip(MATERIALS.findIndex(x => x.name === 'Pressure-treated sill'));
+      Object.assign(settings, defaults, { size: '2x6', axis: verticalEdge ? 2 : 0, flip: 0, len: 96, grip: 'Start', alignment, directionSign: 1 });
+      world = { name: 'Concave seating', pieces: [], groups: {}, guides: [], next: 1 };
+      const id = addGroup('foundation', { points: (reverse ? [...outline].reverse() : outline).map(p => [...p]), y: 8, depth: 48, thickness: 8, footW: 0, footD: 10, slab: false });
+      const source = world.pieces.find(b => b.g === id && (verticalEdge ? Math.abs(b.c[0] - 96) < EPS && Math.abs(b.c[2] - 168) < EPS : Math.abs(b.c[0] - 168) < EPS && Math.abs(b.c[2] - 96) < EPS));
+      eye = verticalEdge ? [96 + cameraSide * 120, 100, 168] : [168, 100, 96 + cameraSide * 120];
+      const state = buildGhost({ box: source, point: verticalEdge ? [96, 8, 160] : [160, 8, 96], normal: [0, 1, 0] });
+      cases.push({ reverse, verticalEdge, cameraSide, alignment, c: state.boxes[0].c, s: state.boxes[0].s, valid: state.valid });
+    }
+    return cases;
+  });
+  for (const state of cases) {
+    const label = `${state.reverse}/${state.verticalEdge}/${state.cameraSide}/${state.alignment}`, across = state.verticalEdge ? 0 : 2;
+    assert.equal(state.valid, true, label);
+    closeTo(state.c[1] - state.s[1] / 2, 8, `${label}: seating elevation`);
+    if (state.alignment === 'Outside') closeTo(state.c[across] + state.s[across] / 2, 100, `${label}: concave outside uses the positive outer face`);
+    else if (state.alignment === 'Inside') closeTo(state.c[across] - state.s[across] / 2, 92, `${label}: concave inside uses the opposite face`);
+    else closeTo(state.c[across], 96, `${label}: middle stays centered`);
+  }
+});
+
+test('Escape cancels the command without freezing mouse look or losing its hotbar slot', async () => {
+  await concreteScene();
+  const before = await page.evaluate(() => ({ item: equipped, slot: activeSlot, shortcut: hotbar[activeSlot] }));
+  await page.keyboard.down('w');
+  await page.waitForFunction(() => document.pointerLockElement === canvas);
+  await page.keyboard.up('w');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.pointerLockElement);
+  await page.mouse.move(640, 400);
+  const direction = await page.evaluate(() => yaw);
+  await page.mouse.move(690, 420); await frame();
+  assert.notEqual(await page.evaluate(() => yaw), direction, 'Mouse look works after Escape without another key');
+  assert.equal(await page.locator('#scene').evaluate(el => getComputedStyle(el).cursor), 'none');
+  assert.equal(await page.evaluate(slot => hotbar[slot], before.slot), before.shortcut, 'Cancelling does not erase the material shortcut');
+  await page.keyboard.press(String(before.slot + 1));
+  assert.equal(await page.evaluate(() => equipped), before.item, 'The same hotbar key re-equips the material');
+  await concreteScene(); await page.keyboard.press('c');
+  assert.equal((await page.locator('#fields [data-seat="Center"]').textContent()).trim(), 'Middle');
+  for (const [seat, z] of [['Outside', -1.25], ['Center', 0], ['Inside', 1.25]]) {
+    await page.locator(`#fields [data-seat="${seat}"]`).click(); await frame();
+    const state = await page.evaluate(() => ({ seat: settings.alignment, board: preview.boxes[0], valid: preview.valid }));
+    assert.equal(state.seat, seat); assert.equal(state.valid, true);
+    closeTo(state.board.c[2], z, 'The direct choice changes the actual foundation seat');
+    assert.equal(await page.locator(`#fields [data-seat="${seat}"]`).getAttribute('aria-pressed'), 'true');
+  }
+});
+
+test('basic material settings show size, length, and seating while exact options stay collapsed', async () => {
+  await concreteScene();
+  await page.keyboard.press('c');
+  const panel = page.locator('#fields');
+  const advanced = panel.locator('details[data-section="advanced"]');
+
+  assert.equal(await advanced.evaluate(el => el.open), false);
+  assert.equal(await panel.locator('[data-field="size"]').isVisible(), true);
+  assert.equal(await panel.locator('[data-field="len"]').isVisible(), true);
+  assert.ok(await panel.locator('input:visible,select:visible').count() <= 3,
+    'Only size, length, and an optional Move by selector appear before Advanced');
+  for (const seat of ['Outside', 'Center', 'Inside']) {
+    assert.equal(await panel.locator(`[data-seat="${seat}"]`).isVisible(), true);
+  }
+
+  const bounds = await panel.locator('[data-field="len"]').boundingBox();
+  const viewport = page.viewportSize();
+  assert.ok(bounds && bounds.y >= 0 && bounds.y + bounds.height < viewport.height,
+    'The common dimension is reachable without scrolling');
+  assert.equal(await advanced.locator('[data-field="layoutSpacing"]').isVisible(), false);
+  assert.equal(await advanced.locator('[data-field="faceOffset"]').isVisible(), false);
+
+  await advanced.locator('summary').click();
+  assert.equal(await advanced.locator('[data-field="layoutSpacing"]').isVisible(), true);
+  assert.equal(await advanced.locator('[data-field="faceOffset"]').isVisible(), true);
+  await advanced.locator('[data-field="snap"]').selectOption('0.125');
+  closeTo(await page.evaluate(() => settings.snap), .125, 'Advanced precision still applies');
+  assert.equal(await panel.locator('details[data-section="advanced"]').evaluate(el => el.open), true,
+    'Changing one advanced value keeps the section open for the next adjustment');
+});
+
+test('the inspector seating choices act directly without entering coordinate values', async () => {
+  await concreteScene();
+  await page.keyboard.press('c');
+  for (const seat of ['Outside', 'Center', 'Inside']) {
+    await page.locator(`#fields [data-seat="${seat}"]`).click();
+    await frame();
+    assert.equal(await page.evaluate(() => settings.alignment), seat);
+    assert.equal(await page.locator(`#fields [data-seat="${seat}"]`).getAttribute('aria-pressed'), 'true');
+  }
+});
+
+test('selected-piece editing offers length and nudges before raw coordinates or angles', async () => {
+  await selectedBoardScene();
+  await page.keyboard.press('c');
+  const panel = page.locator('#fields');
+  const coordinates = panel.locator('details[data-section="coordinates"]');
+  assert.equal(await coordinates.evaluate(el => el.open), false);
+  assert.equal(await panel.getByLabel('Length', { exact: true }).isVisible(), true);
+  assert.equal(await panel.locator('#moveStep').isVisible(), true);
+  for (const value of ['material', '16', '24', 'fine', 'custom']) {
+    assert.equal(await panel.locator(`#moveStep option[value="${value}"]`).count(), 1,
+      `The simple movement menu includes ${value}`);
+  }
+  assert.equal(await panel.locator('#moveCustom').isVisible(), false,
+    'A custom number is only shown when custom movement is selected');
+  assert.equal(await panel.locator('button[data-action="nudge"][data-direction="-1"]:visible').count(), 1);
+  assert.equal(await panel.locator('button[data-action="nudge"][data-direction="1"]:visible').count(), 1,
+    'A precise relative adjustment is available without editing a center coordinate');
+  assert.equal(await coordinates.locator('[data-field="c0"]').isVisible(), false);
+  assert.equal(await coordinates.locator('[data-field="r0"]').isVisible(), false);
+  await coordinates.locator('summary').click();
+  assert.equal(await coordinates.locator('[data-field="c0"]').isVisible(), true);
+  assert.equal(await coordinates.locator('[data-field="r0"]').isVisible(), true);
+  closeTo(Number(await coordinates.locator('[data-field="c0"]').inputValue()), 48,
+    'The exact original position remains accessible');
+});
+
+async function joistNudgeSceneV5(extraPieces = []) {
+  await page.mouse.move(640, 400);
+  await page.evaluate(extraPieces => {
+    equip(0); Object.assign(settings, defaults);
+    world = { name: 'Simple joist adjustments', pieces: [{
+      id: 1, g: null, c: [0, 4.625, 48], s: [1.5, 9.25, 96],
+      placementAxis: 2, n: '2x10 floor joist', layer: 'Floor',
+    }, ...extraPieces], groups: {}, guides: [], next: 10 };
+    history = []; future = []; selected = null;
+    eye = [-100, 80, 200];
+    const target = [0, 4.625, 48], delta = vSub(target, eye);
+    yaw = Math.atan2(delta[0], -delta[2]);
+    pitch = Math.atan2(delta[1], Math.hypot(delta[0], delta[2]));
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  }, extraPieces);
+  await frame();
+  await page.mouse.click(640, 400); await frame();
+  assert.deepEqual(await page.evaluate(() => selected), { id: 1 });
+  await page.keyboard.press('c');
+}
+
+test('Move by shifts a 2x10 by its actual thickness, common spacing, or one custom amount', async () => {
+  await joistNudgeSceneV5();
+  const panel = page.locator('#fields');
+  const position = () => page.evaluate(() => [...world.pieces.find(b => b.id === 1).c]);
+
+  for (const [mode, distance] of [['material', 1.5], ['16', 16], ['24', 24], ['fine', .0625]]) {
+    await panel.locator('#moveStep').selectOption(mode);
+    await panel.locator('[data-action="nudge"][data-direction="1"]').click();
+    const moved = await position();
+    closeTo(moved[0], distance, `${mode} moves along the joist's horizontal transverse axis`);
+    closeTo(moved[1], 4.625, 'The joist remains at the same seating elevation');
+    closeTo(moved[2], 48, 'The joist length position remains fixed');
+    await panel.locator('[data-action="nudge"][data-direction="-1"]').click();
+    closeTo((await position())[0], 0, 'Previous reverses the same simple adjustment');
+  }
+
+  await panel.locator('#moveStep').selectOption('custom');
+  assert.equal(await panel.locator('#moveCustom').isVisible(), true);
+  await panel.locator('#moveCustom').fill('7 3/8"');
+  await panel.locator('#moveCustom').press('Tab');
+  await panel.locator('[data-action="nudge"][data-direction="1"]').click();
+  closeTo((await position())[0], 7.375, 'Custom movement accepts a precise framing fraction');
+  assert.deepEqual(await page.evaluate(() => world.pieces.find(b => b.id === 1).s), [1.5, 9.25, 96],
+    'Position adjustments never resize the lumber');
+});
+
+test('simple thickness movement respects an occupied neighboring joist position', async () => {
+  await joistNudgeSceneV5([{
+    id: 2, g: null, c: [1.5, 4.625, 48], s: [1.5, 9.25, 96],
+    placementAxis: 2, n: 'Neighboring 2x10', layer: 'Floor',
+  }]);
+  await page.locator('#fields #moveStep').selectOption('material');
+  await page.locator('#fields [data-action="nudge"][data-direction="1"]').click();
+  const result = await page.evaluate(() => ({ count: world.pieces.length, first: world.pieces.find(b => b.id === 1).c }));
+  assert.equal(result.count, 2);
+  closeTo(result.first[0], 0, 'A blocked nudge preserves the original instead of skipping to the next empty slot');
+});
+
+test('the wheel shifts a held 2x10 by its thickness instead of changing materials', async () => {
+  await concreteScene();
+  await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Floor joist'));
+    settings.axis = 2; settings.len = 96;
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await frame();
+  const before = await page.evaluate(() => ({ equipped, center: [...preview.boxes[0].c], sizes: [...preview.boxes[0].s] }));
+  await page.mouse.wheel(0, 120); await frame();
+  const after = await page.evaluate(() => ({ equipped, center: [...preview.boxes[0].c], sizes: [...preview.boxes[0].s] }));
+  assert.equal(after.equipped, before.equipped, 'Scrolling adjusts placement instead of selecting another hotbar slot');
+  closeTo(Math.abs(after.center[0] - before.center[0]), 1.5, 'One wheel notch uses the actual 2x10 thickness');
+  closeTo(after.center[1], before.center[1], 'Wheel placement preserves concrete seating elevation');
+  closeTo(after.center[2], before.center[2], 'The run start stays fixed');
+  assert.deepEqual(after.sizes, before.sizes);
+  await page.mouse.wheel(0, -120); await frame();
+  const reversed = await page.evaluate(() => [...preview.boxes[0].c]);
+  reversed.forEach((value, axis) => closeTo(value, before.center[axis], 'The opposite wheel notch reverses the exact adjustment'));
+});
+
+test('Shift plus the wheel uses the fine increment for held placement', async () => {
+  await concreteScene();
+  await page.evaluate(() => {
+    equip(MATERIALS.findIndex(item => item.name === 'Floor joist'));
+    settings.axis = 2; settings.len = 96; settings.snap = .0625;
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await frame();
+  await page.keyboard.down('Shift');
+  await page.mouse.wheel(0, 120); await frame();
+  await page.keyboard.up('Shift');
+  const first = await page.evaluate(() => preview.boxes[0].c[0]);
+  // concreteScene's centerline X=48 stays constant under its forward-facing camera;
+  // a fine wheel adjustment must not be pulled back to the 48-inch layout mark.
+  closeTo(Math.abs(first - 48), .0625, 'Shift wheel places exactly one fine increment off the reference');
+});
+
+test('the wheel uses sheet thickness when a panel is selected', async () => {
+  await selectedBoardScene();
+  await page.evaluate(() => {
+    const panel = world.pieces.find(b => b.id === 1);
+    panel.c = [48, 48, 0]; panel.s = [96, 96, .4375]; panel.placementAxis = 0;
+    panel.n = '7/16 wall sheathing';
+    sceneDirty = geometryDirty = mouse.dirty = true;
+  });
+  await frame();
+  await page.mouse.wheel(0, 120); await frame();
+  const panel = await page.evaluate(() => world.pieces.find(b => b.id === 1));
+  closeTo(Math.abs(panel.c[2]), .4375, 'One wheel notch uses the panel thickness, not its sheet width');
+  closeTo(panel.c[0], 48, 'The panel run position remains fixed');
+  closeTo(panel.c[1], 48, 'The panel seating height remains fixed');
+  assert.deepEqual(panel.s, [96, 96, .4375]);
+});
+
+test('scroll positioning works for every existing loose material using its actual cross-section', async () => {
+  await page.mouse.move(640, 400);
+  const catalog = await page.evaluate(() => MATERIALS.flatMap((item, index) =>
+    ['lumber', 'primitive', 'panel'].includes(item.kind) ? [{ index, name: item.name }] : []));
+  assert.equal(catalog.length, 31);
+  for (const item of catalog) {
+    const before = await page.evaluate(index => {
+      Object.assign(settings, defaults); equip(index);
+      world = { name: 'Catalog scroll', pieces: [], groups: {}, guides: [], next: 2 };
+      const stock = current();
+      const hit = { box: null, point: [0, 0, 0], normal: [0, 1, 0] };
+      const board = stock.kind === 'panel' ? placePanel(stock, hit) : placePrimitive(stock, hit);
+      board.id = 1; board.g = null;
+      world.pieces = [board]; equip(0); selected = { id: 1 };
+      sceneDirty = geometryDirty = mouse.dirty = true; renderInspector();
+      const run = board.placementAxis;
+      return { center: [...board.c], sizes: [...board.s], thickness: Math.min(...board.s.filter((_, axis) => axis !== run)) };
+    }, item.index);
+    await frame();
+    await page.mouse.wheel(0, 120); await frame();
+    const after = await page.evaluate(() => ({ center: [...world.pieces[0].c], sizes: [...world.pieces[0].s], equipped }));
+    const travel = Math.hypot(...after.center.map((value, axis) => value - before.center[axis]));
+    closeTo(travel, before.thickness, `${item.name}: scrolling applies one actual material thickness`);
+    assert.deepEqual(after.sizes, before.sizes, `${item.name}: scroll positioning preserves dimensions`);
+    assert.equal(after.equipped, 0, `${item.name}: scrolling does not replace the selected edit tool`);
+  }
+});
+
+test('placement uses screen markers instead of solid cubes that obscure thin stock', async () => {
+  await concreteScene();
+  const state = await page.evaluate(() => ({
+    indicators: preview.indicators,
+    visual: previewVisualState(),
+    backend: gl ? 'webgl' : 'software',
+    selectedTriangles: drawCounts[4], selectedLines: drawCounts[5],
+  }));
+  assert.deepEqual(state.indicators, [], 'No world-size blue cubes cover the contact point');
+  assert.equal(state.visual.selectionFill, 0);
+  assert.equal(state.visual.inspectFill, 0);
+  assert.ok(state.visual.materialFill > 0 && state.visual.materialFill <= .08,
+    'The material preview is faint enough to see the supporting edge');
+  assert.ok(state.visual.blockedFill > state.visual.materialFill && state.visual.blockedFill <= .12,
+    'Blocked placement is visible without becoming opaque');
+  if (state.backend === 'webgl') {
+    assert.equal(state.selectedTriangles, 0, 'No marker triangles are sent to the blue selection buffer');
+    assert.equal(state.selectedLines, 0);
+  }
+  assert.ok(await page.locator('#placementOverlay circle').count() > 0,
+    'Small screen-space contact markers remain available');
+});
+
+test('selection and inspect overlays render lines without blue solid faces', async () => {
+  const trace = await page.evaluate(() => {
+    equip(0);
+    world = { name: 'Wire selection', pieces: [{ id: 1, g: null,
+      c: [48, .75, 0], s: [96, 1.5, 5.5], placementAxis: 0,
+      n: 'Loose plate', layer: 'Floor' }], groups: {}, guides: [], next: 2 };
+    eye = [48, 100, 300]; yaw = 0; pitch = -Math.atan((100 - 1.5) / 300);
+    selected = null; preview = null; sceneDirty = geometryDirty = true;
+
+    if (gl) {
+      const original = bufferDraw;
+      const baseline = [], overlay = [];
+      let calls = baseline;
+      bufferDraw = (index, kind) => { calls.push({ index, kind }); original(index, kind); };
+      try {
+        draw(); calls = overlay;
+        selected = { id: 1 };
+        preview = { boxes: [world.pieces[0]], indicators: [], valid: true, text: 'Inspect' };
+        draw();
+        return { backend: 'webgl', baseline, overlay, triangles: gl.TRIANGLES, lines: gl.LINES };
+      } finally { bufferDraw = original; }
+    }
+
+    const originalFill = canvas2D.fill, originalStroke = canvas2D.stroke;
+    const baseline = { fills: 0, strokes: 0 }, overlay = { fills: 0, strokes: 0 };
+    let calls = baseline;
+    canvas2D.fill = function(...args) { calls.fills++; return originalFill.apply(this, args); };
+    canvas2D.stroke = function(...args) { calls.strokes++; return originalStroke.apply(this, args); };
+    try {
+      draw(); calls = overlay;
+      selected = { id: 1 };
+      preview = { boxes: [world.pieces[0]], indicators: [], valid: true, text: 'Inspect' };
+      draw();
+      return { backend: 'software', baseline, overlay };
+    } finally { canvas2D.fill = originalFill; canvas2D.stroke = originalStroke; }
+  });
+
+  if (trace.backend === 'webgl') {
+    assert.equal(trace.overlay.some(call => [2, 4].includes(call.index) && call.kind === trace.triangles), false,
+      'Zero-alpha blue overlays skip triangles rather than triggering the opaque vertex-color shader path');
+    assert.ok(trace.overlay.some(call => call.index === 3 && call.kind === trace.lines), 'Inspect edges remain visible');
+    assert.ok(trace.overlay.some(call => call.index === 5 && call.kind === trace.lines), 'Selection edges remain visible');
+  } else {
+    assert.equal(trace.overlay.fills, trace.baseline.fills, 'Software overlays add no filled faces');
+    assert.ok(trace.overlay.strokes > trace.baseline.strokes, 'Software selection still draws outlines');
+  }
+});
+
+test('every loose material joins a neighboring side face snugly for every grip', async context => {
+  const result = await page.evaluate(() => {
+    const failures=[];let count=0;
+    for(let index=0;index<MATERIALS.length;index++){
+      const it=MATERIALS[index];if(!['lumber','primitive','panel'].includes(it.kind))continue;
+      Object.assign(settings,defaults);equip(index);settings.grip='Start';settings.directionSign=1;
+      world={name:'Universal snug placement',pieces:[],groups:{},guides:[],next:2};
+      const ground={box:null,point:[0,0,0],normal:[0,1,0]};
+      const source=it.kind==='panel'?placePanel(it,ground):placePrimitive(it,ground);source.id=1;source.g=null;world.pieces=[source];
+      const axis=source.placementAxis,thin=[0,1,2].reduce((m,i)=>source.s[i]<source.s[m]?i:m,0);
+      const cross=it.kind==='panel'?[0,1,2].find(i=>i!==axis&&i!==thin):axis===1?(source.s[0]<=source.s[2]?0:2):axis===0?2:0;
+      for(const grip of ['Start','Center','End','Offset'])for(const side of [-1,1]){
+        count++;settings.grip=grip;const point=[...source.c],normal=[0,0,0];point[cross]+=side*source.s[cross]/2;normal[cross]=side;
+        const state=buildGhost({box:source,point,normal}),b=state.boxes[0],expected=[...source.c];expected[cross]+=side*(source.s[cross]+b.s[cross])/2;
+        if(!state.valid||b.c.some((v,i)=>Math.abs(v-expected[i])>1e-6)||b.s.some((v,i)=>Math.abs(v-source.s[i])>1e-6))failures.push({material:it.name,grip,side,valid:state.valid,center:b.c,expected,sizes:b.s,source:source.s});
+      }
+    }
+    return{count,failures};
+  });
+  assert.equal(result.count,31*4*2);
+  assert.deepEqual(result.failures,[],'All catalog stock should meet directly, at matching run/base positions');
+  context.diagnostic(`${result.count} snug face placements across all31 loose materials`);
+});
+
+test('angled rafters and roof panels use the same snug side placement rule', async () => {
+  const result=await page.evaluate(()=>{
+    const failures=[];
+    for(const panel of [false,true])for(const grip of ['Start','Center','End','Offset']){
+      Object.assign(settings,defaults);equip(MATERIALS.findIndex(x=>x.name===(panel?'Roof sheathing 4×8':'Rafter')));
+      Object.assign(settings,{axis:2,len:120,size:'2x8',width:48,depth:.5,grip,flip:0});
+      const source={id:1,g:null,c:[24,60,48],s:panel?[48,.5,120]:[1.5,7.25,120],r:[-Math.atan(.5),.3,0],placementAxis:2,materialKind:panel?'panel':'lumber',n:panel?'Roof sheet':'Rafter',layer:'Roof'};
+      world={name:'Angled neighbors',pieces:[source],groups:{},guides:[],next:2};
+      const normal=axesRotation(source).map(row=>row[0]),point=transformPoint(source,[source.s[0]/2,0,0]);
+      const state=buildGhost({box:source,point,normal}),b=state.boxes[0],expected=vAdd(source.c,vMul(normal,source.s[0]));
+      if(!state.valid||b.c.some((v,i)=>Math.abs(v-expected[i])>1e-6)||b.r.some((v,i)=>Math.abs(v-source.r[i])>1e-6))failures.push({panel,grip,valid:state.valid,center:b.c,expected,rotation:b.r});
+    }
+    return failures;
+  });
+  assert.deepEqual(result,[],'Snug placement follows the real supporting frame, including pitched material');
+});
+
+test('the wheel repositions an active length drag without changing its length', async () => {
+  await beginPlateDrag();await dragEndpoint(63.5);
+  const before=await page.evaluate(()=>({point:[...gesture.point],length:preview.boxes[0].s[gesture.axis],equipped}));
+  await page.mouse.wheel(0,-120);await frame();
+  const after=await page.evaluate(()=>({point:[...gesture.point],length:preview.boxes[0].s[gesture.axis],equipped}));
+  closeTo(Math.hypot(...after.point.map((v,i)=>v-before.point[i])),1.5,'A wheel notch moves the fixed placement point by one actual thickness');
+  closeTo(after.length,before.length,'Sliding does not resize the piece');
+  assert.equal(after.equipped,before.equipped);
+  await page.mouse.up();
+});
+
+test('a custom move amount also applies to the wheel for held material', async () => {
+  await concreteScene();
+  await page.evaluate(()=>{equip(MATERIALS.findIndex(x=>x.name==='Floor joist'));settings.axis=2;sceneDirty=mouse.dirty=true});
+  await page.keyboard.press('c');
+  await page.locator('#moveStep').selectOption('custom');await page.locator('#moveCustom').fill('3 1/4"');await page.locator('#moveCustom').press('Tab');
+  await page.keyboard.press('Escape');await frame();
+  const before=await page.evaluate(()=>preview.boxes[0].c[0]);
+  await page.mouse.wheel(0,-120);await frame();
+  closeTo(Math.abs(await page.evaluate(()=>preview.boxes[0].c[0])-before),3.25,'The same custom amount is used by the scroll wheel');
+});
+
+test('consecutive real side-face clicks build a snug joist pack without staggered ends', async () => {
+  await page.mouse.move(640,400);
+  await page.evaluate(()=>{
+    Object.assign(settings,defaults);equip(MATERIALS.findIndex(x=>x.name==='Floor joist'));
+    settings.len=96;settings.axis=2;
+    world={name:'Real joist pack',pieces:[{id:1,g:null,c:[0,4.625,48],s:[1.5,9.25,96],placementAxis:2,n:'Existing joist',layer:'Floor'}],groups:{},guides:[],next:2};
+    eye=[100,80,200];const d=vSub([.75,4.625,48],eye);yaw=Math.atan2(d[0],-d[2]);pitch=Math.atan2(d[1],Math.hypot(d[0],d[2]));sceneDirty=geometryDirty=mouse.dirty=true;
+  });
+  await frame();
+  for(let i=0;i<3;i++){await page.mouse.click(640,400);await frame()}
+  const pieces=await page.evaluate(()=>world.pieces);
+  assert.equal(pieces.length,4);
+  for(let i=0;i<4;i++){
+    closeTo(pieces[i].c[0],i*1.5,'Each actual click adds the very next joist');
+    closeTo(pieces[i].c[1],4.625,'Joists share the same base');
+    closeTo(pieces[i].c[2],48,'Joist ends remain aligned');
+    assert.deepEqual(pieces[i].s,[1.5,9.25,96]);
+  }
+});
+
+test('wheel positioning moves an assembly and its recipe together', async () => {
+  await page.mouse.move(640,400);
+  const id=await page.evaluate(()=>{
+    equip(0);Object.assign(settings,defaults);world={name:'Wheel assembly',pieces:[],groups:{},guides:[],next:1};
+    const id=addGroup('wall',{a:[0,0],b:[96,0],y:0,stud:'2x6',oc:16,height:97.125,tops:2,header:'2x10',openings:[]});
+    eye=[48,50,200];yaw=0;pitch=0;sceneDirty=geometryDirty=mouse.dirty=true;return id;
+  });
+  await frame();await page.mouse.click(640,400);await frame();
+  const before=await page.evaluate(id=>({recipe:copy(world.groups[id]),positions:world.pieces.map(p=>[...p.c])}),id);
+  await page.mouse.wheel(0,-120);await frame();
+  const after=await page.evaluate(id=>({recipe:world.groups[id],positions:world.pieces.map(p=>p.c)}),id);
+  closeTo(after.recipe.a[1]-before.recipe.a[1],1.5,'The wall shifts by actual stock thickness');
+  closeTo(after.recipe.b[1]-before.recipe.b[1],1.5,'Recipe endpoints stay together');
+  after.positions.forEach((p,i)=>closeTo(p[2]-before.positions[i][2],1.5,'Every component receives the same wheel shift'));
+  await page.keyboard.press('Control+z');
+  assert.deepEqual(await page.evaluate(id=>world.groups[id],id),before.recipe);
+});
+
+test('turning horizontal stock preserves its section height for every material', async () => {
+  const failures=await page.evaluate(()=>{
+    const failures=[];
+    for(let i=0;i<MATERIALS.length;i++){
+      if(!['lumber','primitive'].includes(MATERIALS[i].kind))continue;
+      Object.assign(settings,defaults);equip(i);
+      for(const flip of [0,1]){
+        settings.flip=flip;
+        const x=primitiveDims(current(),0),z=primitiveDims(current(),2);
+        if(x[1]!==z[1]||x[2]!==z[0])failures.push({material:current().name,flip,x,z});
+      }
+    }
+    return failures;
+  });
+  assert.deepEqual(failures,[],'Changing X/Z direction should not unexpectedly lay stock flat or stand it up');
+});
+
+test('held on-center presets measure from the neighboring joist center, not its touching face', async () => {
+  await page.mouse.move(640,400);
+  await page.evaluate(()=>{
+    Object.assign(settings,defaults);equip(MATERIALS.findIndex(x=>x.name==='Floor joist'));
+    settings.len=96;settings.moveStep='16';
+    world={name:'On-center positioning',pieces:[{id:1,g:null,c:[0,4.625,48],s:[1.5,9.25,96],placementAxis:2,n:'Existing joist',layer:'Floor'}],groups:{},guides:[],next:2};
+    eye=[100,80,200];const d=vSub([.75,4.625,48],eye);yaw=Math.atan2(d[0],-d[2]);pitch=Math.atan2(d[1],Math.hypot(d[0],d[2]));sceneDirty=geometryDirty=mouse.dirty=true;
+  });
+  await frame();
+  closeTo(await page.evaluate(()=>preview.boxes[0].c[0]),1.5,'Material starts at the snug position');
+  for(const center of [16,32]){await page.mouse.wheel(0,-120);await frame();closeTo(await page.evaluate(()=>preview.boxes[0].c[0]),center,'The layout preset uses true center-to-center stations')}
+  await page.mouse.wheel(0,120);await frame();
+  closeTo(await page.evaluate(()=>preview.boxes[0].c[0]),16,'Scrolling back returns to the preceding layout station');
 });
